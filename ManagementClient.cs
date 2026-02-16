@@ -17,5 +17,48 @@ namespace Retirebot
         {
             _client = client;
         }
+        public async Task<string[]> GetSubscriptionsAsync()
+        {
+            string uri = "/subscriptions?api-version=2022-12-01";
+
+            var response = await _client.GetAsync(uri);
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+            return result.GetProperty("value")
+                .EnumerateArray()
+                .Select(s => s.GetProperty("subscriptionId").GetString() ?? string.Empty)
+                .ToArray();
+        }
+
+        public async Task<QueryResult<ARGRetirementData>> RunQueryAsync(string subscriptionId, string query)
+        {
+            string uri = "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01";
+
+            var requestBody = new
+            {
+                subscriptions = new[] { subscriptionId },
+                query
+            };
+
+            var response = await _client.PostAsJsonAsync(uri, requestBody);
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<QueryResult<ARGRetirementData>>();
+            return result;
+        }
+
+        public async Task<Advisory> GetAdvisoryAsync(string uri)
+        {
+            string apiVersion = "2025-01-01";
+
+            var response = await _client.GetAsync(String.Format("{0}?api-version={1}", uri, apiVersion));
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<Advisory>();
+
+            return result;
+        }
     }
 }
