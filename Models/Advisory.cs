@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
-
-namespace Retirebot.Models
+﻿namespace Retirebot.Models
 {
     public class Advisory
     {
@@ -13,6 +6,16 @@ namespace Retirebot.Models
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty;
         public AdvisoryProperties Properties { get; set; } = new();
+
+        public string GetResourceGroupName()
+        {
+            return Id.Split('/')[3];
+        }
+
+        public string GetResourceName()
+        {
+            return Properties.ImpactedValue.ToString();
+        }
     }
 
     public class AdvisoryProperties
