@@ -8,13 +8,21 @@ namespace Retirebot
     {
         public async static Task<Dictionary<string, Issue>> FindExistingIssuesByLabelsAsync(ILogger logger, GitHubClient ghClient, List<Advisory> advisories)
         {
+            string? repoOwner = Environment.GetEnvironmentVariable("REPOSITORY_OWNER");
+            string? repoName = Environment.GetEnvironmentVariable("REPOSITORY_NAME");
+
+            if (repoOwner == null || repoName == null)
+            {
+                throw new MissingFieldException("REPOSITORY_OWNER or REPOSITORY_NAME field are empty");
+            }
+
             Dictionary<string, Issue> existingIssues = new Dictionary<string, Issue>();
             const int batchSize = 5;
 
             for (int i = 0; i < advisories.Count; i += batchSize)
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
-                var repo = "ZanyLeonic/TestArchitecture";
+                var repo = $"{repoOwner}/{repoName}";
                 var labelQueries = batch.Select(a => $"advisor-{a.Name}");
                 var searchQuery = $"repo:{repo} label:{string.Join(",", labelQueries)}";
 
@@ -67,16 +75,6 @@ namespace Retirebot
                 throw new MissingFieldException("REPOSITORY_OWNER or REPOSITORY_NAME field are empty");
             }
 
-            var installations = await ghClient.GitHubApps.GetAllInstallationsForCurrent();
-
-            Installation repoInstall = installations.Where(a => a.Account.Login == repoOwner).ElementAt(0);
-            AccessToken response = await ghClient.GitHubApps.CreateInstallationToken(repoInstall.Id);
-
-            GitHubClient repoClient = new GitHubClient(new ProductHeaderValue("RetireBot"))
-            {
-                Credentials = new Credentials(response.Token)
-            };
-
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
 
             var created = advisories.Select(async advisory =>
@@ -95,10 +93,9 @@ namespace Retirebot
                     newIssue.Labels.Add("azure-advisor");
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
-                    newIssue.Assignees.Add(repoOwner);
                     newIssue.Assignees.Add("copilot-swe-agent[bot]");
 
-                    var created = await repoClient.Issue.Create(repoOwner, repoName, newIssue);
+                    var created = await ghClient.Issue.Create(repoOwner, repoName, newIssue);
                     logger.LogInformation("Created issue #{Number} for advisory {AdvisoryId}",
                         created.Number, advisory.Name);
 

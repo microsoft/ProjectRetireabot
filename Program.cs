@@ -26,22 +26,13 @@ builder.Services.AddHttpClient<ManagementClient>(c => c.BaseAddress = new Uri("h
 
 builder.Services.AddSingleton(sp =>
 {
-    var appId = long.Parse(Environment.GetEnvironmentVariable("GITHUB_APP_ID") ?? throw new InvalidOperationException("GITHUB_APP_ID not configured"));
-    var privateKeyPath = Path.Combine(Directory.GetCurrentDirectory(), Environment.GetEnvironmentVariable("GITHUB_PRIVATE_KEY_PATH") ?? "private-key.pem");
-    var privateKey = File.ReadAllText(privateKeyPath);
+    var pat = Environment.GetEnvironmentVariable("GITHUB_PAT") ?? throw new InvalidOperationException("GITHUB_PAT not configured");
+    var username = Environment.GetEnvironmentVariable("GITHUB_USERNAME") ?? throw new InvalidOperationException("GITHUB_USERNAME not configured");
 
     var appClient = new GitHubClient(new ProductHeaderValue("Retirebot"))
     {
-        Credentials = new Credentials(GitHubAuthenticationHandler.GetJWT(appId, privateKey), AuthenticationType.Bearer)
+        Credentials = new Credentials(username, pat)
     };
-
-    // If you need installation token instead of JWT, you'd do:
-    // var installationId = long.Parse(Environment.GetEnvironmentVariable("GITHUB_INSTALLATION_ID"));
-    // var response = appClient.GitHubApps.CreateInstallationToken(installationId).Result;
-    // return new GitHubClient(new ProductHeaderValue("Retirebot"))
-    // {
-    //     Credentials = new Credentials(response.Token)
-    // };
 
     return appClient;
 });

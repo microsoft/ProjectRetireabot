@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace Retirebot
+namespace Retirebot.Helpers
 {
     public class ManagementClient
     {
@@ -53,7 +53,7 @@ namespace Retirebot
         {
             string apiVersion = "2025-01-01";
 
-            var response = await _client.GetAsync(String.Format("{0}?api-version={1}", uri, apiVersion));
+            var response = await _client.GetAsync(string.Format("{0}?api-version={1}", uri, apiVersion));
             response.EnsureSuccessStatusCode();
 
             var result = await response.Content.ReadFromJsonAsync<Advisory>();
