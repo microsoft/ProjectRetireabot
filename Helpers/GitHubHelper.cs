@@ -2,7 +2,7 @@
 using Octokit;
 using Retirebot.Models;
 
-namespace Retirebot
+namespace Retirebot.Helpers
 {
     public class GitHubHelper
     {

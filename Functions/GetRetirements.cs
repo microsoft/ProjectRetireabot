@@ -2,9 +2,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Octokit;
+using Retirebot.Helpers;
 using Retirebot.Models;
 
-namespace Retirebot
+namespace Retirebot.Functions
 {
     public class GetRetirements
     {

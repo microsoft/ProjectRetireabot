@@ -3,7 +3,7 @@ using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Octokit;
-using Retirebot;
+using Retirebot.Helpers;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 

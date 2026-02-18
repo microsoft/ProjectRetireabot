@@ -1,7 +1,7 @@
 using Azure.Core;
 using System.Net.Http.Headers;
 
-namespace Retirebot
+namespace Retirebot.Helpers
 {
     public class AzureCredentialTokenHandler : DelegatingHandler
     {
