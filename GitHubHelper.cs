@@ -1,7 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using Octokit;
+using Retirebot.Models;
 
-namespace Retirebot.Models
+namespace Retirebot
 {
     public class GitHubHelper
     {
