@@ -55,9 +55,14 @@ namespace Retirebot
 
             _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues", existingIssues.Count, advisoriesToCreate.Count);
 
-            
+            var createdIssues = await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate);
 
-            return new OkObjectResult(advisories);
+            return new OkObjectResult(new
+            {
+                TotalAdvisories = advisories.Count,
+                ExistingIssues = existingIssues.Count,
+                CreatedIssues = createdIssues.Count
+            });
         }
     }
 }
