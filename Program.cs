@@ -3,7 +3,9 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Octokit;
+using Polly;
 using Retirebot.Helpers;
 
 var builder = FunctionsApplication.CreateBuilder(args);
@@ -29,10 +31,18 @@ builder.Services.AddSingleton(new DefaultAzureCredential());
 builder.Services.AddTransient(sp =>
     new AzureCredentialTokenHandler(
         sp.GetRequiredService<DefaultAzureCredential>(),
-        ["https://management.azure.com/.default"]));
+        new[] { "https://management.azure.com/.default" }));
 
-builder.Services.AddHttpClient<ManagementClient>(c => c.BaseAddress = new Uri("https://management.azure.com/"))
-    .AddHttpMessageHandler<AzureCredentialTokenHandler>();
+builder.Services.AddHttpClient<ManagementClient>(c =>
+{
+    c.BaseAddress = new Uri("https://management.azure.com/");
+    c.Timeout = TimeSpan.FromSeconds(30);
+})
+    .AddHttpMessageHandler<AzureCredentialTokenHandler>()
+        .AddPolicyHandler(Policy<HttpResponseMessage>
+        .Handle<HttpRequestException>()
+        .OrResult(r => (int)r.StatusCode is 429 or >= 500)
+        .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
 
 builder.Services.AddSingleton(sp =>
 {

@@ -1,9 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
+using Retirebot.Helpers;
+using Retirebot.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Octokit;
-using Retirebot.Helpers;
-using Retirebot.Models;
+using System.Diagnostics;
 
 namespace Retirebot.Functions
 {
@@ -20,34 +20,37 @@ namespace Retirebot.Functions
             _ghClient = ghClient;
         }
 
+        // Runs every Monday at 00:00 GMT
         [Function("GetRetirements")]
-        public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get")] TimerInfo myTimer)
+        public async Task Run([TimerTrigger("0 0 0 * * 1")] TimerInfo timerInfo)
         {
-            //// Use _armClient to run Resource Graph queries
-            //// Example: var response = await _armClient.GetTenantResourceGraphAsync(content);
+            Stopwatch sw = Stopwatch.StartNew();
+            _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
 
-            //_logger.LogInformation($"C# Timer trigger function executed at: {DateTime.Now}");
-            
-            //if (myTimer.ScheduleStatus is not null)
-            //{
-            //    _logger.LogInformation($"Next timer schedule at: {myTimer.ScheduleStatus.Next}");
-            //}
-
-            var subs = await _managementClient.GetSubscriptionsAsync();
-            QueryResult<ARGRetirementData> data = await _managementClient.RunQueryAsync(subs[0], "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId)");
+            string[] subs = await _managementClient.GetSubscriptionsAsync();
+            if (subs is null || subs.Length == 0)
+            {
+                _logger.LogWarning("No subscriptions returned; aborting.");
+                return;
+            }
 
             List<Advisory> advisories = new List<Advisory>();
 
-            for (int i = 0; i < data.Length; i++)
+            foreach (string sub in subs)
             {
-                string advisoryId = data.Data[i].Id;
-                try
+                QueryResult<ARGRetirementData> data = await _managementClient.RunQueryAsync(sub, "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId)");
+
+                for (int i = 0; i < data.Length; i++)
                 {
-                    advisories.Add(await _managementClient.GetAdvisoryAsync(advisoryId));
-                } catch(HttpRequestException ex)
-                {
-                    _logger.LogWarning("Failed to get advisory for resource {AdvisoryId}", advisoryId);
-                    _logger.LogWarning($"{ex}");
+                    string advisoryId = data.Data[i].Id;
+                    try
+                    {
+                        advisories.Add(await _managementClient.GetAdvisoryAsync(advisoryId));
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to get advisory for resource {AdvisoryId}", advisoryId);
+                    }
                 }
             }
 
@@ -58,12 +61,9 @@ namespace Retirebot.Functions
 
             var createdIssues = await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate);
 
-            return new OkObjectResult(new
-            {
-                TotalAdvisories = advisories.Count,
-                ExistingIssues = existingIssues.Count,
-                CreatedIssues = createdIssues.Count
-            });
+            sw.Stop();
+            _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
+            _logger.LogInformation("Next timer schedule = {NextSchedule}", timerInfo.ScheduleStatus?.Next);
         }
     }
 }
