@@ -1,11 +1,6 @@
 ﻿using Retirebot.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Retirebot.Helpers
 {
@@ -46,6 +41,11 @@ namespace Retirebot.Helpers
             response.EnsureSuccessStatusCode();
 
             var result = await response.Content.ReadFromJsonAsync<QueryResult<ARGRetirementData>>();
+
+            if (result == null) {
+                throw new InvalidOperationException("Got a null object when attempting to deserialise Azure Resource Graph Query response.");
+            }
+
             return result;
         }
 
@@ -57,6 +57,11 @@ namespace Retirebot.Helpers
             response.EnsureSuccessStatusCode();
 
             var result = await response.Content.ReadFromJsonAsync<Advisory>();
+
+            if (result == null)
+            {
+                throw new InvalidOperationException("Got a null object when attempting to deserialise Azure Advisory response.");
+            }
 
             return result;
         }

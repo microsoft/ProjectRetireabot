@@ -114,7 +114,11 @@ namespace Retirebot.Helpers
 
             var results = await Task.WhenAll(created);
 
-            return [.. results.Where(i => i != null)];
+            if (results == null)
+            {
+   return new List<Issue>();             
+            }
+ return [.. results.Where(i => i != null).Select(i => i!)];
         }
 
         private static string GenerateIssueTitle(Advisory advisory)
