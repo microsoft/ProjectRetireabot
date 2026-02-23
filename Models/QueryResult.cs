@@ -6,10 +6,13 @@ namespace Retirebot.Models
     {
         [JsonPropertyName("count")]
         public int Length { get; set; }
+
         [JsonPropertyName("data")]
-        public List<T> Data { get; set; }
-        [JsonPropertyName("resultsTrauncated")]
-        public bool TrauncatedResults { get; set; }
+        public List<T> Data { get; set; } = new();
+
+        [JsonPropertyName("resultTruncated")]
+        public bool ResultTruncated { get; set; }
+
         [JsonPropertyName("totalRecords")]
         public int TotalRecords { get; set; }
     }
