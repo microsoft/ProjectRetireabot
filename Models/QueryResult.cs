@@ -11,7 +11,7 @@ namespace Retirebot.Models
         public List<T> Data { get; set; } = new();
 
         [JsonPropertyName("resultTruncated")]
-        public bool ResultTruncated { get; set; }
+        public string ResultTruncated { get; set; }
 
         [JsonPropertyName("totalRecords")]
         public int TotalRecords { get; set; }

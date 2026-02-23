@@ -1,9 +1,11 @@
-using Retirebot.Helpers;
-using Retirebot.Models;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Octokit;
+using Retirebot.Helpers;
+using Retirebot.Models;
 using System.Diagnostics;
+using System.Net;
 
 namespace Retirebot.Functions
 {
@@ -22,7 +24,35 @@ namespace Retirebot.Functions
 
         // Runs every Monday at 00:00 GMT
         [Function("GetRetirements")]
-        public async Task Run([TimerTrigger("0 0 0 * * 1")] TimerInfo timerInfo)
+        public async Task RunTimer([TimerTrigger("0 0 0 * * 1")] TimerInfo timerInfo)
+        {
+            _logger.LogInformation("Retrieving Retirements via Timer");
+            await GetRetirementsASync();
+            _logger.LogInformation("Next timer schedule = {NextSchedule}", timerInfo.ScheduleStatus?.Next);
+        }
+
+        [Function("GetRetirementsDebug")]
+        public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
+        {
+            _logger.LogInformation("Retrieving Retirements via HTTP Manual trigger");
+
+            try
+            {
+                await GetRetirementsASync();
+
+                var response = req.CreateResponse(HttpStatusCode.OK);
+                await response.WriteStringAsync("Completed successfully.");
+                return response;
+            } catch (Exception ex)
+            {
+                _logger.LogError("Caught exception whilst handling request.\n{Exception}", ex);
+                var response = req.CreateResponse(HttpStatusCode.InternalServerError);
+                await response.WriteStringAsync("Error whilst completing action. Please check App Insights for more information.");
+                return response;
+            }
+        }
+
+        public async Task GetRetirementsASync()
         {
             Stopwatch sw = Stopwatch.StartNew();
             _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
@@ -63,7 +93,6 @@ namespace Retirebot.Functions
 
             sw.Stop();
             _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
-            _logger.LogInformation("Next timer schedule = {NextSchedule}", timerInfo.ScheduleStatus?.Next);
         }
     }
 }
