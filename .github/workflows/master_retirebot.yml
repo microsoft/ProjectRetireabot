@@ -45,13 +45,12 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: "Deploy to Azure Functions"
-        shell: bash
-        run: |
-          az functionapp deploy \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP_NAME }}" \
-            --name "${{ vars.FUNCTION_APP_NAME }}" \
-            --src-path functionapp.zip \
-            --type zip \
-            --clean true \
-            --restart true
+      - name: "Run Azure Functions Action"
+        uses: Azure/functions-action@v1
+        id: fa
+        with:
+          app-name: "${{ vars.FUNCTION_APP_NAME }}"
+          package: functionapp.zip
+          publish-profile: ""
+          scm-do-build-during-deployment: false
+          slot-name: "Production"
