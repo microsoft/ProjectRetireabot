@@ -18,13 +18,19 @@ builder.Services
 
 builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 {
-    LoggerFilterRule? defaultRule = options.Rules.FirstOrDefault(rule => rule.ProviderName
-        == "Microsoft.Extensions.Logging.ApplicationInsights.ApplicationInsightsLoggerProvider");
-    if (defaultRule is not null)
+    // The isolated worker SDK registers a default Warning filter under this provider name.
+    // Remove it so that host.json logLevel settings are respected.
+    var rulesToRemove = options.Rules
+        .Where(rule => rule.ProviderName == "Microsoft.Extensions.Logging.ApplicationInsights.ApplicationInsightsLoggerProvider")
+        .ToList();
+
+    foreach (var rule in rulesToRemove)
     {
-        options.Rules.Remove(defaultRule);
+        options.Rules.Remove(rule);
     }
 });
+
+builder.Logging.SetMinimumLevel(LogLevel.Information);
 
 builder.Services.AddSingleton(new DefaultAzureCredential());
 
