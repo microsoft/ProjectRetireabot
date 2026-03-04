@@ -53,11 +53,10 @@ builder.Services.AddHttpClient<ManagementClient>(c =>
 builder.Services.AddSingleton(sp =>
 {
     var pat = Environment.GetEnvironmentVariable("GITHUB_PAT") ?? throw new InvalidOperationException("GITHUB_PAT not configured");
-    var username = Environment.GetEnvironmentVariable("GITHUB_USERNAME") ?? throw new InvalidOperationException("GITHUB_USERNAME not configured");
 
     var appClient = new GitHubClient(new ProductHeaderValue("Retirebot"))
     {
-        Credentials = new Credentials(username, pat)
+        Credentials = new Credentials(pat)
     };
 
     return appClient;
