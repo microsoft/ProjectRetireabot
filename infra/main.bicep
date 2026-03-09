@@ -101,45 +101,95 @@ module applicationInsights 'br/public:avm/res/insights/component:0.6.0' =  {
 }
 
 var managedIdentityResourceName = 'uai-${deploymentSuffix}'
-module userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  name: take('avm.res.managed-identity.uai.${managedIdentityResourceName}', 64)
-  params: {
-    // Required parameters
-    name: managedIdentityResourceName
-    // Non-required parameters
-    location: location
+
+resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: managedIdentityResourceName
+  location: location
+}
+var storageAccountResourceName = 'jobstore${deploymentSuffix}'
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2021-09-01' = {
+  name: storageAccountResourceName
+  location: location
+  kind: 'StorageV2'
+  properties: {
+    accessTier: 'Hot'
+    allowBlobPublicAccess: false
+    allowCrossTenantReplication: true
+    allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: false
+    encryption: {
+      keySource: 'Microsoft.Storage'
+      services: {
+        queue: {
+          keyType: 'Service'
+        }
+        table: {
+          keyType: 'Service'
+        }
+      }
+    }
+    isHnsEnabled: false
+    isNfsV3Enabled: false
+    isSftpEnabled: false
+    minimumTlsVersion: 'TLS1_2'
+    networkAcls: {
+      defaultAction: 'Allow'
+    }
+        
+    publicNetworkAccess: 'Enabled'
+    supportsHttpsTrafficOnly: true
+  }
+  tags: {
+    SecurityControl: 'Ignore'
+  } 
+  sku: {
+    name: 'Standard_LRS'
   }
 }
 
-var storageAccountResourceName = 'jobstore${deploymentSuffix}'
-module storageAccount 'br/public:avm/res/storage/storage-account:0.31.2' = {
-  name: take('avm.storage.storage-account.${storageAccountResourceName}', 64)
-  params: {
-    // Required parameters
-    name: storageAccountResourceName
-    location: location
-    // Non-required parameters
-    kind: 'StorageV2'
-    skuName: 'Standard_LRS'
-    accessTier: 'Hot'
+resource blobContributorDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  scope: storageAccount
+  name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+}
 
-    roleAssignments: [
-      {
-        principalId: userAssignedIdentity!.outputs.principalId
-        roleDefinitionIdOrName: 'Storage Blob Data Owner'
-        principalType: 'ServicePrincipal'
-      }
-      {
-        principalId: userAssignedIdentity!.outputs.principalId
-        roleDefinitionIdOrName: 'Storage Queue Data Contributor'
-        principalType: 'ServicePrincipal'
-      }
-      {
-        principalId: userAssignedIdentity!.outputs.principalId
-        roleDefinitionIdOrName: 'Storage Table Data Contributor'
-        principalType: 'ServicePrincipal'
-      }
-    ]
+resource blobAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storageAccount
+  name: guid(resourceGroup().id, userAssignedIdentity.id, blobContributorDefinition.id)
+  properties: {
+    roleDefinitionId: blobContributorDefinition.id
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource queueContributorDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  scope: storageAccount
+  name: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+}
+
+resource queueAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storageAccount
+  name: guid(resourceGroup().id, userAssignedIdentity.id, queueContributorDefinition.id)
+  properties: {
+    roleDefinitionId: queueContributorDefinition.id
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource tableContributorDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  scope: storageAccount
+  name: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+}
+
+resource tableAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storageAccount
+   name: guid(resourceGroup().id, userAssignedIdentity.id, tableContributorDefinition.id)
+  properties: {
+    roleDefinitionId: tableContributorDefinition.id
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -166,24 +216,28 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
   name: take('avm.res.web.site.${functionSiteResourceName}', 64)
   params: {
     // Required parameters
-    kind: 'functionapp,linux'
+    kind: 'functionapp'
     name: functionSiteResourceName
     serverFarmResourceId: serverfarm!.outputs.resourceId
     location: location
     managedIdentities: {
       userAssignedResourceIds: [
-        userAssignedIdentity!.outputs.resourceId
+        userAssignedIdentity.id
       ]
     }
     siteConfig: {
       appSettings: [
         {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
           value: applicationInsights!.outputs.instrumentationKey
         }
         {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: applicationInsights!.outputs.connectionString
+        }
+        {
           name: 'AzureWebJobsStorage__blobServiceUri'
-          value: storageAccount!.outputs.primaryBlobEndpoint
+          value: storageAccount.properties.primaryEndpoints.blob
 
         }
         {
@@ -193,12 +247,12 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
         }
         {
           name: 'AzureWebJobsStorage__queueServiceUri'
-          value: storageAccount!.outputs.serviceEndpoints.queue
+          value: storageAccount.properties.primaryEndpoints.queue
 
         }
         {
           name: 'AzureWebJobsStorage__tableServiceUri'
-          value: storageAccount!.outputs.serviceEndpoints.table
+          value: storageAccount.properties.primaryEndpoints.table
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -234,5 +288,9 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
         }
       ]
     }
+    diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId  }] 
+    tags: {
+      'azd-service-name': 'evergreen'
+    } 
   }
 }
