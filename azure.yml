@@ -1,0 +1,8 @@
+name: azure-evergreen
+metadata:
+  template: azure-evergreen@1.0
+services:
+  evergreen:
+    project: .
+    language: dotnet
+    host: function

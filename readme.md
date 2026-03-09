@@ -1,11 +1,23 @@
-# TimerTrigger - C<span>#</span>
+# RetireBot
 
-The `TimerTrigger` makes it incredibly easy to have your functions executed on a schedule. This sample demonstrates a simple use case of calling your function every 5 minutes.
+This is the repository contains the source code to RetireBot, an under-development proof-of-concept to help customers be on top of their resource migrations of EoL Azure services and or SKUs.
 
 ## How it works
 
-For a `TimerTrigger` to work, you provide a schedule in the form of a [cron expression](https://en.wikipedia.org/wiki/Cron#CRON_expression)(See the link for full details). A cron expression is a string with 6 separate expressions which represent a given schedule via patterns. The pattern we use to represent every 5 minutes is `0 */5 * * * *`. This, in plain text, means: "When seconds is equal to 0, minutes is divisible by 5, for any hour, day of the month, month, day of the week, or year".
+1. Retrieves all Azure Advisor advisories for your deployed resources in the subscriptions it has access to
+2. Fetches the full advisory and extracts the key information from it
+3. Checks if the advisory already has an issue, if not creates it as an issue on a specified GitHub repository and assign GitHub CoPilot to the issue
+4. GitHub CoPilot attempts to resolve the issue and create a PR to review
 
-## Learn more
+## Requirements
 
-<TODO> Documentation
+- Azure Subscription(s)
+- GitHub CoPilot Licenses
+
+## Usage
+
+By default this function will run every Monday at 00:00 `"0 0 0 * * 1`. This can be tweaked by changing the Cron expression inside of [GetRetirements.cs](Functions/GetRetirements.cs).
+
+## Deployment
+
+<TODO: Write Deployment section>
