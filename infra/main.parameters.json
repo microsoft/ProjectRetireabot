@@ -16,6 +16,9 @@
     },
     "githubRepository": {
       "value": ""
+    },
+    "targetResourceGroup": {
+      "value": ""
     }
   }
 }

@@ -27,6 +27,9 @@ param githubUsername string
 @description('Name of the target repository only')
 param githubRepository string
 
+@description('(Optional) The resource group EverGreen should create issues for, leave blank any resource group')
+param targetResourceGroup string
+
 var storageBlobDataOwnerRoleId  = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
@@ -91,9 +94,9 @@ module logAnalyticsWS 'br/public:avm/res/operational-insights/workspace:0.15.0' 
 
 var applicationInsightsResourceName = 'appi-${deploymentSuffix}'
 resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
-    name: applicationInsightsResourceName
-    location: location
-    kind: 'web'
+  name: applicationInsightsResourceName
+  location: location
+  kind: 'web'
   properties: {
     Application_Type: 'web'
     Flow_Type: 'Bluefield'
@@ -240,7 +243,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
       ]
     }
     siteConfig: {
-      appSettings: [
+      appSettings: union([
         {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
           value: applicationInsights.properties.InstrumentationKey
@@ -297,7 +300,12 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           name: 'WEBSITE_USE_PLACEHOLDER_DOTNETISOLATED'
           value: '1'
         }
+
+      ],
+      empty(targetResourceGroup) ? [] : [
+        { name: 'TARGET_RESOURCE_GROUP', value: targetResourceGroup}
       ]
+      )
     }
     diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId  }] 
     tags: {

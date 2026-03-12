@@ -14,12 +14,18 @@ namespace Retirebot.Functions
         private readonly ILogger _logger;
         private readonly ManagementClient _managementClient;
         private readonly GitHubClient _ghClient;
+        private readonly string _advisoryQuery;
+
+        private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId)";
 
         public GetRetirements(ILoggerFactory loggerFactory, ManagementClient client, GitHubClient ghClient)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
             _ghClient = ghClient;
+
+            string? rg = Environment.GetEnvironmentVariable("TARGET_RESOURCE_GROUP");
+            _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
         }
 
         // Runs every Monday at 00:00 GMT
@@ -43,7 +49,8 @@ namespace Retirebot.Functions
                 var response = req.CreateResponse(HttpStatusCode.OK);
                 await response.WriteStringAsync("Completed successfully.");
                 return response;
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 _logger.LogError("Caught exception whilst handling request.\n{Exception}", ex);
                 var response = req.CreateResponse(HttpStatusCode.InternalServerError);
@@ -68,7 +75,7 @@ namespace Retirebot.Functions
 
             foreach (string sub in subs)
             {
-                QueryResult<ARGRetirementData> data = await _managementClient.RunQueryAsync(sub, "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId)");
+                QueryResult<ARGRetirementData> data = await _managementClient.RunQueryAsync(sub, _advisoryQuery);
 
                 for (int i = 0; i < data.Length; i++)
                 {
