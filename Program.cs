@@ -32,7 +32,10 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
-builder.Services.AddSingleton(new DefaultAzureCredential());
+builder.Services.AddSingleton(new DefaultAzureCredential(new DefaultAzureCredentialOptions
+{
+    ManagedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID")
+}));
 
 builder.Services.AddTransient(sp =>
     new AzureCredentialTokenHandler(

@@ -27,6 +27,11 @@ param githubUsername string
 @description('Name of the target repository only')
 param githubRepository string
 
+var storageBlobDataOwnerRoleId  = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var storageQueueDataContributorId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
+var storageTableDataContributorId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+var monitoringMetricsPublisherId = '3913510d-42f4-4e42-8a64-420c390055eb'
 
 var deploymentSuffix = toLower(trim(replace(
   replace(
@@ -85,29 +90,19 @@ module logAnalyticsWS 'br/public:avm/res/operational-insights/workspace:0.15.0' 
 }
 
 var applicationInsightsResourceName = 'appi-${deploymentSuffix}'
-module applicationInsights 'br/public:avm/res/insights/component:0.6.0' =  {
-  name: take('avm.res.insights.component.${applicationInsightsResourceName}', 64)
-  params: {
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
     name: applicationInsightsResourceName
     location: location
-    retentionInDays: 365
     kind: 'web'
-    disableIpMasking: false
-    flowType: 'Bluefield'
-    // WAF aligned configuration for Monitoring
-    workspaceResourceId: logAnalyticsWS!.outputs.resourceId
-    diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId  }] 
+  properties: {
+    Application_Type: 'web'
+    Flow_Type: 'Bluefield'
+    WorkspaceResourceId: logAnalyticsWS.outputs.resourceId
+    DisableLocalAuth: true
   }
 }
 
-var managedIdentityResourceName = 'uai-${deploymentSuffix}'
-
-resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: managedIdentityResourceName
-  location: location
-}
 var storageAccountResourceName = 'jobstore${deploymentSuffix}'
-
 resource storageAccount 'Microsoft.Storage/storageAccounts@2021-09-01' = {
   name: storageAccountResourceName
   location: location
@@ -148,46 +143,65 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2021-09-01' = {
   }
 }
 
-resource blobContributorDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  scope: storageAccount
-  name: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var managedIdentityResourceName = 'uai-${deploymentSuffix}'
+resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: managedIdentityResourceName
+  location: location
 }
 
-resource blobAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+module subscriptionRoleAssignments 'subscriptionRoleAssignments.bicep' = {
+  name: 'subscriptionRoleAssignments'
+  scope: subscription()
+  params: {
+    principalId: userAssignedIdentity.properties.principalId
+  }
+}
+
+resource roleAssignmentBlobDataOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, storageAccount.id, userAssignedIdentity.id, 'Storage Blob Data Owner')
   scope: storageAccount
-  name: guid(resourceGroup().id, userAssignedIdentity.id, blobContributorDefinition.id)
   properties: {
-    roleDefinitionId: blobContributorDefinition.id
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataOwnerRoleId)
     principalId: userAssignedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-resource queueContributorDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+resource roleAssignmentBlob 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, storageAccount.id, userAssignedIdentity.id, 'Storage Blob Data Contributor')
   scope: storageAccount
-  name: '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
-}
-
-resource queueAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storageAccount
-  name: guid(resourceGroup().id, userAssignedIdentity.id, queueContributorDefinition.id)
   properties: {
-    roleDefinitionId: queueContributorDefinition.id
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalId: userAssignedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-resource tableContributorDefinition 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+resource roleAssignmentQueueStorage 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, storageAccount.id, userAssignedIdentity.id, 'Storage Queue Data Contributor')
   scope: storageAccount
-  name: '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageQueueDataContributorId)
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
-resource tableAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource roleAssignmentTableStorage 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, storageAccount.id, userAssignedIdentity.id, 'Storage Table Data Contributor')
   scope: storageAccount
-   name: guid(resourceGroup().id, userAssignedIdentity.id, tableContributorDefinition.id)
   properties: {
-    roleDefinitionId: tableContributorDefinition.id
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageTableDataContributorId)
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource roleAssignmentAppInsights 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, applicationInsights.id, userAssignedIdentity.id, 'Monitoring Metrics Publisher')
+  scope: applicationInsights
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringMetricsPublisherId)
     principalId: userAssignedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -229,30 +243,27 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
       appSettings: [
         {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-          value: applicationInsights!.outputs.instrumentationKey
+          value: applicationInsights.properties.InstrumentationKey
         }
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: applicationInsights!.outputs.connectionString
+          value: applicationInsights.properties.ConnectionString
         }
         {
-          name: 'AzureWebJobsStorage__blobServiceUri'
-          value: storageAccount.properties.primaryEndpoints.blob
-
+          name: 'AZURE_CLIENT_ID'
+          value: userAssignedIdentity.properties.clientId
+        }
+        {
+          name: 'AzureWebJobsStorage__accountName'
+          value: storageAccount.name
+        }
+        {
+          name: 'AzureWebJobsStorage__clientId'
+          value: userAssignedIdentity.properties.clientId
         }
         {
           name: 'AzureWebJobsStorage__credential'
           value: 'managedidentity'
-
-        }
-        {
-          name: 'AzureWebJobsStorage__queueServiceUri'
-          value: storageAccount.properties.primaryEndpoints.queue
-
-        }
-        {
-          name: 'AzureWebJobsStorage__tableServiceUri'
-          value: storageAccount.properties.primaryEndpoints.table
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
