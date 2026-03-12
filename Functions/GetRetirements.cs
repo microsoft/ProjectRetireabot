@@ -16,7 +16,7 @@ namespace Retirebot.Functions
         private readonly GitHubClient _ghClient;
         private readonly string _advisoryQuery;
 
-        private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId)";
+        private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), problem = tostring(properties.shortDescription.problem), solution = tostring(properties.shortDescription.solution), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId)";
 
         public GetRetirements(ILoggerFactory loggerFactory, ManagementClient client, GitHubClient ghClient)
         {
@@ -79,15 +79,7 @@ namespace Retirebot.Functions
 
                 for (int i = 0; i < data.Length; i++)
                 {
-                    string advisoryId = data.Data[i].Id;
-                    try
-                    {
-                        advisories.Add(await _managementClient.GetAdvisoryAsync(advisoryId));
-                    }
-                    catch (HttpRequestException ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to get advisory for resource {AdvisoryId}", advisoryId);
-                    }
+                    advisories.Add(data.Data[i].ToAdvisory());
                 }
             }
 
