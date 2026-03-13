@@ -30,10 +30,6 @@ namespace Retirebot.Models
         public required string ImpactedValue { get; set; }
         [JsonPropertyName("lastUpdated")]
         public required string LastUpdated { get; set; }
-        [JsonPropertyName("problem")]
-        public required string Problem { get; set; }
-        [JsonPropertyName("solution")]
-        public required string Solution { get; set; }
         [JsonPropertyName("retirementDate")]
         public string? RetirementDate { get; set; }
         [JsonPropertyName("retirementFeatureName")]
@@ -56,7 +52,11 @@ namespace Retirebot.Models
                 ImpactedValue = ImpactedValue,
                 LastUpdated = DateTime.TryParse(LastUpdated, out var dt) ? dt : DateTime.MinValue,
                 RecommendationTypeId = ServiceID,
-                ShortDescription = new ShortDescription { Problem = Problem, Solution = Solution },
+                ShortDescription = new ShortDescription
+                {
+                    Problem = $"{RetirementFeatureName ?? "Azure service"} is scheduled for retirement{(RetirementDate != null ? $" on {RetirementDate}" : "")}.",
+                    Solution = $"Migrate away from {RetirementFeatureName ?? "the retiring service"} before the retirement date."
+                },
                 ExtendedProperties = new ExtendedProperties
                 {
                     MaturityLevel = MaturityLevel,
