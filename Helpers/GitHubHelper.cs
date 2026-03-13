@@ -46,8 +46,12 @@ namespace Retirebot.Helpers
 
                         if (advisoryLabel != null)
                         {
-                            var advisoryId = advisoryLabel.Name.Replace(AdvisoryLabelPrefix, "");
-                            existingIssues[advisoryId] = issue;
+
+                            var matchedAdvisory = batch.FirstOrDefault(a => GetAdvisoryLabel(a.Name) == advisoryLabel.Name);
+                            if (matchedAdvisory != null)
+                            {
+                                existingIssues[matchedAdvisory.Name] = issue;
+                            }
                         }
                     }
                 }

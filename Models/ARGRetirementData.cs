@@ -54,7 +54,7 @@ namespace Retirebot.Models
                 RecommendationTypeId = ServiceID,
                 ShortDescription = new ShortDescription
                 {
-                    Problem = $"{RetirementFeatureName ?? "Azure service"} is scheduled for retirement{(RetirementDate != null ? $" on {RetirementDate}" : "")}.",
+                    Problem = $"{RetirementFeatureName ?? "Azure service"} is scheduled for retirement{(RetirementDate != null ? $" on {RetirementDate}" : "")}",
                     Solution = $"Migrate away from {RetirementFeatureName ?? "the retiring service"} before the retirement date."
                 },
                 ExtendedProperties = new ExtendedProperties
