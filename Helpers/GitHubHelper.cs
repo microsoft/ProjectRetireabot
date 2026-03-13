@@ -23,7 +23,7 @@ namespace Retirebot.Helpers
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
                 var repo = $"{repoOwner}/{repoName}";
-                var labelQueries = batch.Select(a => $"advisor-{a.Name}");
+                var labelQueries = batch.Select(a => GetAdvisoryLabel(a.Name));
                 var searchQuery = $"repo:{repo} label:{string.Join(",", labelQueries)}";
 
                 var searchRequest = new SearchIssuesRequest(searchQuery)
@@ -42,11 +42,11 @@ namespace Retirebot.Helpers
                     for (int j = 0; j < results.Items.Count; j++)
                     {
                         var issue = results.Items[j];
-                        var advisoryLabel = issue.Labels.FirstOrDefault(l => l.Name.StartsWith("advisor-"));
+                        var advisoryLabel = issue.Labels.FirstOrDefault(l => l.Name.StartsWith(AdvisoryLabelPrefix));
 
                         if (advisoryLabel != null)
                         {
-                            var advisoryId = advisoryLabel.Name.Replace("advisor-", "");
+                            var advisoryId = advisoryLabel.Name.Replace(AdvisoryLabelPrefix, "");
                             existingIssues[advisoryId] = issue;
                         }
                     }
@@ -89,7 +89,7 @@ namespace Retirebot.Helpers
                     };
 
                     // Add labels including the advisory GUID
-                    newIssue.Labels.Add($"advisor-{advisory.Name}");
+                    newIssue.Labels.Add(GetAdvisoryLabel(advisory.Name));
                     newIssue.Labels.Add("azure-advisor");
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
@@ -119,6 +119,19 @@ namespace Retirebot.Helpers
    return new List<Issue>();             
             }
  return [.. results.Where(i => i != null).Select(i => i!)];
+        }
+
+        private const int MaxLabelLength = 50;
+        private const string AdvisoryLabelPrefix = "advisor-";
+
+        private static string GetAdvisoryLabel(string advisoryName)
+        {
+            var label = $"{AdvisoryLabelPrefix}{advisoryName}";
+            if (label.Length > MaxLabelLength)
+            {
+                label = label[..MaxLabelLength];
+            }
+            return label;
         }
 
         private static string GenerateIssueTitle(Advisory advisory)
