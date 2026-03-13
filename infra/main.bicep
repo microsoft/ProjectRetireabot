@@ -35,6 +35,7 @@ var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var monitoringMetricsPublisherId = '3913510d-42f4-4e42-8a64-420c390055eb'
+var keyvaultSecretsUserId = '4633458b-17de-408a-b874-0445c86b69e6'
 
 var deploymentSuffix = toLower(trim(replace(
   replace(
@@ -45,6 +46,35 @@ var deploymentSuffix = toLower(trim(replace(
   '*',
   ''
 )))
+
+var keyVaultResourceName = 'kv-${deploymentSuffix}'
+resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
+  name: keyVaultResourceName
+  location: location
+  properties: {
+    createMode: 'default'
+    enableRbacAuthorization: true
+    enableSoftDelete: true
+    enabledForDeployment: false
+    enabledForDiskEncryption: false
+    enabledForTemplateDeployment: false
+    publicNetworkAccess: 'Enabled'
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    softDeleteRetentionInDays: 7
+    tenantId: deployer().tenantId
+  }
+}
+
+resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = {
+  parent: vault
+  name: 'GithubPAT'
+  properties: {
+    value: githubPAT
+  }
+}
 
 var logAnalyticsWorkspaceResourceName = 'log-${deploymentSuffix}'
 module logAnalyticsWS 'br/public:avm/res/operational-insights/workspace:0.15.0' = {
@@ -210,6 +240,16 @@ resource roleAssignmentAppInsights 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+resource roleAssignmentKeyVaultReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, vault.id, userAssignedIdentity.id, 'Key Vault Secrets User')
+  scope: vault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyvaultSecretsUserId)
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 var functionServerFarmResourceName = 'asp-${deploymentSuffix}'
 module serverfarm 'br/public:avm/res/web/serverfarm:0.7.0' = {
   name: take('avm.res.web.serverfarm.${functionServerFarmResourceName}', 64)
@@ -242,6 +282,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
         userAssignedIdentity.id
       ]
     }
+    keyVaultAccessIdentityResourceId: userAssignedIdentity.id
     siteConfig: {
       appSettings: union([
         {
@@ -278,7 +319,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
         }
         {
           name: 'GITHUB_PAT'
-          value: githubPAT
+          value: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${gitHubSecret.name})'
         }
         {
           name: 'REPOSITORY_NAME'
