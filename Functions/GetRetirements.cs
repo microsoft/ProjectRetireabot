@@ -37,9 +37,17 @@ namespace Retirebot.Functions
             _logger.LogInformation("Next timer schedule = {NextSchedule}", timerInfo.ScheduleStatus?.Next);
         }
 
-        [Function("GetRetirementsDebug")]
+        [Function("GetRetirementsManual")]
         public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
         {
+            string? httpFlag = Environment.GetEnvironmentVariable("ENABLE_HTTP_ENDPOINT");
+
+            if (httpFlag == null || httpFlag.ToLower() != "true")
+            {
+                _logger.LogDebug("Manual Endpoint hit when ENABLE_HTTP_ENDPOINT is disabled");
+                return req.CreateResponse(HttpStatusCode.NotFound);
+            }
+
             _logger.LogInformation("Retrieving Retirements via HTTP Manual trigger");
 
             try

@@ -1,6 +1,6 @@
-# RetireBot
+# Evergreen
 
-This is the repository contains the source code to RetireBot, an under-development proof-of-concept to help customers be on top of their resource migrations of EoL Azure services and or SKUs.
+This is the repository contains the source code to Evergreen, an under-development proof-of-concept to help customers be on top of their resource migrations of EoL Azure services and or SKUs.
 
 ## How it works
 
@@ -34,5 +34,6 @@ There are some key parameters you need to specify:
 | targetResourceGroup  | `false`  | The resource group EverGreen should create issues for, leave blank any resource group                    |
 | deploymentName       | `false`  | A unique application/solution name for all resources in this deployment                                  |
 | deploymentUniqueText | `false`  | Unique text value for the solution. This is used to ensure resource names are unique for global resource |
+| enableHTTPEndpoint   | `false`  | Whether the manual HTTP endpoint should be enabled.                                                      |
 
 Once you have configured EverGreen with ensure your parameters file is called `main.parameters.json`, and run `azd up` at the root of the project directory, which it will then provision the architecture and deploy the application.
