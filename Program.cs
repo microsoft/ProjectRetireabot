@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Octokit;
 using Polly;
 using Retirebot.Helpers;
+using System.Text.RegularExpressions;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -64,4 +65,13 @@ builder.Services.AddSingleton(sp =>
 
     return appClient;
 });
+
+string? targetRepo = Environment.GetEnvironmentVariable("TARGET_REPOSITORY");
+Regex RepoPattern = new Regex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$");
+
+if (targetRepo == null || !RepoPattern.IsMatch(targetRepo))
+{
+    throw new MissingFieldException("TARGET_REPOSITORY is empty or not in the expected 'owner/repo' format");
+}
+
 builder.Build().Run();

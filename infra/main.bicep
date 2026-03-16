@@ -12,8 +12,8 @@ metadata description = '''This module contains all the components needed to depl
 param deploymentName string = 'azeg'
 
 @maxLength(5)
-@description('Optional. A unique text value for the solution. This is used to ensure resource names are unique for global resources. Defaults to a 5-character substring of the unique string generated from the subscription ID, resource group name, and solution name.')
-param deploymentUniqueText string = take(uniqueString(subscription().id, resourceGroup().name, deploymentName), 5)
+@description('Optional. A unique text value for the solution. This is used to ensure resource names are unique for global resources. Defaults to a random 5-character string generated on each deployment.')
+param deploymentUniqueText string = take(uniqueString(newGuid()), 5)
 
 @metadata({ azd: { type: 'location' } })
 param location string
@@ -21,11 +21,8 @@ param location string
 @description('The PAT that allows EverGreen to interact with your GitHub repository.')
 param githubPAT string
 
-@description('Username of the repository belongs to')
-param githubUsername string
-
-@description('Name of the target repository only')
-param githubRepository string
+@description('Target GitHub Repository to create issues on from advisories')
+param targetRepository string
 
 @description('(Optional) The resource group EverGreen should create issues for, leave blank any resource group')
 param targetResourceGroup string
@@ -322,12 +319,8 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           value: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${gitHubSecret.name})'
         }
         {
-          name: 'REPOSITORY_NAME'
-          value: githubRepository
-        }
-        {
-          name: 'REPOSITORY_OWNER'
-          value: githubUsername
+          name: 'TARGET_REPOSITORY'
+          value: targetRepository
         }
         {
           name: 'WEBSITE_ENABLE_SYNC_UPDATE_SITE'

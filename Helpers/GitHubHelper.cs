@@ -1,19 +1,19 @@
 ﻿using Microsoft.Extensions.Logging;
 using Octokit;
 using Retirebot.Models;
+using System.Text.RegularExpressions;
 
 namespace Retirebot.Helpers
 {
-    public class GitHubHelper
+    public partial class GitHubHelper
     {
         public async static Task<Dictionary<string, Issue>> FindExistingIssuesByLabelsAsync(ILogger logger, GitHubClient ghClient, List<Advisory> advisories)
         {
-            string? repoOwner = Environment.GetEnvironmentVariable("REPOSITORY_OWNER");
-            string? repoName = Environment.GetEnvironmentVariable("REPOSITORY_NAME");
+            string? targetRepo = Environment.GetEnvironmentVariable("TARGET_REPOSITORY");
 
-            if (repoOwner == null || repoName == null)
+            if (targetRepo == null)
             {
-                throw new MissingFieldException("REPOSITORY_OWNER or REPOSITORY_NAME field are empty");
+                throw new MissingFieldException("TARGET_REPOSITORY is empty ");
             }
 
             Dictionary<string, Issue> existingIssues = new Dictionary<string, Issue>();
@@ -22,16 +22,15 @@ namespace Retirebot.Helpers
             for (int i = 0; i < advisories.Count; i += batchSize)
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
-                var repo = $"{repoOwner}/{repoName}";
                 var labelQueries = batch.Select(a => GetAdvisoryLabel(a.Name));
-                var searchQuery = $"repo:{repo} label:{string.Join(",", labelQueries)}";
+                var searchQuery = $"repo:{targetRepo} label:{string.Join(",", labelQueries)}";
 
                 var searchRequest = new SearchIssuesRequest(searchQuery)
                 {
                     Type = IssueTypeQualifier.Issue,
                     Repos = new RepositoryCollection
                     {
-                        repo
+                        targetRepo
                     }
                 };
 
@@ -71,12 +70,11 @@ namespace Retirebot.Helpers
 
         public async static Task<List<Issue>> CreateIssuesBatch(ILogger logger, GitHubClient ghClient, List<Advisory> advisories)
         {
-            string? repoOwner = Environment.GetEnvironmentVariable("REPOSITORY_OWNER");
-            string? repoName = Environment.GetEnvironmentVariable("REPOSITORY_NAME");
+            string? targetRepo = Environment.GetEnvironmentVariable("TARGET_REPOSITORY");
 
-            if (repoOwner == null || repoName == null)
+            if (targetRepo == null)
             {
-                throw new MissingFieldException("REPOSITORY_OWNER or REPOSITORY_NAME field are empty");
+                throw new MissingFieldException("TARGET_REPOSITORY is empty ");
             }
 
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
@@ -99,7 +97,9 @@ namespace Retirebot.Helpers
 
                     newIssue.Assignees.Add("copilot-swe-agent[bot]");
 
-                    var created = await ghClient.Issue.Create(repoOwner, repoName, newIssue);
+                    string[] repoParts = targetRepo.Split("/");
+
+                    var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
                     logger.LogInformation("Created issue #{Number} for advisory {AdvisoryId}",
                         created.Number, advisory.Name);
 
