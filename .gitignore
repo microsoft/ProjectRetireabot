@@ -265,3 +265,5 @@ __pycache__/
 
 # for obvious reasons
 private-key.pem
+
+main.parameters.json

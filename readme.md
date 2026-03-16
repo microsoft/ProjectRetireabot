@@ -20,4 +20,19 @@ By default this function will run every Monday at 00:00 `"0 0 0 * * 1`. This can
 
 ## Deployment
 
-<TODO: Write Deployment section>
+The preferred way to deploy this program is using the [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd), which handles both provisioning of the architecture and the deployment of the application to a target resource group.
+
+Before provisioning the architecture, you need to specify parameters to define the behaviour of EverGreen, copy the example json, and remove `.example`.
+
+There are some key parameters you need to specify:
+
+| Name                 | Required | Description                                                                                              |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| location             | `true`   | The location where the resources are deployed                                                            |
+| githubPAT            | `true`   | Personal access token for GitHub                                                                         |
+| targetRepository     | `true`   | Target GitHub Repository to create issues on from advisories                                             |
+| targetResourceGroup  | `false`  | The resource group EverGreen should create issues for, leave blank any resource group                    |
+| deploymentName       | `false`  | A unique application/solution name for all resources in this deployment                                  |
+| deploymentUniqueText | `false`  | Unique text value for the solution. This is used to ensure resource names are unique for global resource |
+
+Once you have configured EverGreen with ensure your parameters file is called `main.parameters.json`, and run `azd up` at the root of the project directory, which it will then provision the architecture and deploy the application.

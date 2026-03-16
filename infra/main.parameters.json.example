@@ -11,10 +11,7 @@
     "githubPAT": {
       "value": ""
     },
-    "githubUsername": {
-      "value": ""
-    },
-    "githubRepository": {
+    "targetRepository": {
       "value": ""
     },
     "targetResourceGroup": {
