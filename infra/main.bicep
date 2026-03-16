@@ -12,8 +12,8 @@ metadata description = '''This module contains all the components needed to depl
 param deploymentName string = 'azeg'
 
 @maxLength(5)
-@description('Optional. A unique text value for the solution. This is used to ensure resource names are unique for global resources. Defaults to a random 5-character string generated on each deployment.')
-param deploymentUniqueText string = take(uniqueString(newGuid()), 5)
+@description('Optional. A unique text value for the solution. This is used to ensure resource names are unique for global resources. Defaults to a 5-character substring of the unique string generated from the subscription ID, resource group name, and solution name.')
+param deploymentUniqueText string = take(uniqueString(subscription().id, resourceGroup().name, deploymentName), 5)
 
 @metadata({ azd: { type: 'location' } })
 param location string
