@@ -38,6 +38,10 @@ namespace Retirebot.Models
         public required string MaturityLevel { get; set; }
         [JsonPropertyName("recommendationOfferingId")]
         public required string RecommendationOfferingId { get; set; }
+        [JsonPropertyName("shortDescriptionProblem")]
+        public string? ShortDescriptionProblem {  get; set; }
+        [JsonPropertyName("shortDescriptionSolution")]
+        public string? ShortDescriptionSolution { get; set; }
 
         public Advisory ToAdvisory() => new Advisory
         {
@@ -54,8 +58,8 @@ namespace Retirebot.Models
                 RecommendationTypeId = ServiceID,
                 ShortDescription = new ShortDescription
                 {
-                    Problem = $"{RetirementFeatureName ?? "Azure service"} is scheduled for retirement{(RetirementDate != null ? $" on {RetirementDate}" : "")}",
-                    Solution = $"Migrate away from {RetirementFeatureName ?? "the retiring service"} before the retirement date."
+                    Problem = ShortDescriptionProblem ?? $"{RetirementFeatureName ?? "Azure service"} is scheduled for retirement{(RetirementDate != null ? $" on {RetirementDate}" : "")}",
+                    Solution = ShortDescriptionSolution ?? $"Migrate away from {RetirementFeatureName ?? "the retiring service"} before the retirement date."
                 },
                 ExtendedProperties = new ExtendedProperties
                 {
