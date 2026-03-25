@@ -16,6 +16,18 @@
     },
     "targetResourceGroup": {
       "value": ""
+    },
+    "workItemScope": {
+      "value": "monolithic"
+    },
+    "resourceGroupRepositoryMap": {
+      "value": [
+        {
+          "name": "rg-resources",
+          "type": "ResourceGroup",
+          "repository": "ExampleUser/TestRepo"
+        }
+      ]
     }
   }
 }

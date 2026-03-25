@@ -6,6 +6,7 @@ using Retirebot.Helpers;
 using Retirebot.Models;
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 
 namespace Retirebot.Functions
 {
@@ -16,6 +17,10 @@ namespace Retirebot.Functions
         private readonly GitHubClient _ghClient;
         private readonly string _advisoryQuery;
 
+        private readonly string _targetRepository;
+        private readonly string _workItemScope;
+        private readonly List<AzureRepositoryMap> _rgRepoMapping;
+
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
         public GetRetirements(ILoggerFactory loggerFactory, ManagementClient client, GitHubClient ghClient)
@@ -23,6 +28,14 @@ namespace Retirebot.Functions
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
             _ghClient = ghClient;
+
+            _targetRepository = Environment.GetEnvironmentVariable("TARGET_REPOSITORY") ?? throw new InvalidOperationException("TARGET_REPOSITORY is not configured.");
+            _workItemScope = Environment.GetEnvironmentVariable("WORKITEM_SCOPE") ?? "monolithic";
+
+            string? mappingJson = Environment.GetEnvironmentVariable("TARGET_RESOURCE_GROUP_MAPPING");
+            _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
+                ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
+                : [];
 
             string? rg = Environment.GetEnvironmentVariable("TARGET_RESOURCE_GROUP");
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
@@ -65,6 +78,22 @@ namespace Retirebot.Functions
                 await response.WriteStringAsync("Error whilst completing action. Please check App Insights for more information.");
                 return response;
             }
+        }
+
+        private string GetRepositoryForAdvisory(Advisory advisory)
+        {
+            if (_workItemScope != "perResourceGroup")
+            {
+                return _targetRepository;
+            }
+
+            string resourceGroup = advisory.GetResourceGroupName();
+
+            var mapping = _repoMappings.FirstOrDefault(m =>
+                m.Type == AzureContainerType.ResourceGroup
+                && string.Equals(m.Name, resourceGroup, StringComparison.OrdinalIgnoreCase));
+
+            return mapping?.Repository ?? _targetRepository;
         }
 
         public async Task GetRetirementsASync()

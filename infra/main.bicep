@@ -31,7 +31,14 @@ param targetResourceGroup string
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
 param enableHTTPEndpoint string = 'false'
 
-var storageBlobDataOwnerRoleId  = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+@allowed(['monolithic', 'perResourceGroup'])
+@description('(Optional) Whether issues should be created in one "triage" repository or should be shared across multiple repositories with a parent issue in the repository. Default "monolithic"')
+param workItemScope string = 'monolithic'
+
+@description('(Optional) If "perResourceGroup" is selected, these mappings decide which repositories issues are created based on their resource groups.')
+param resourceGroupRepositoryMap array = []
+
+var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
@@ -89,37 +96,37 @@ module logAnalyticsWS 'br/public:avm/res/operational-insights/workspace:0.15.0' 
     diagnosticSettings: [{ useThisWorkspace: true }]
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
-    dataSources:  [
+    dataSources: [
+      {
+        eventLogName: 'Application'
+        eventTypes: [
           {
-            eventLogName: 'Application'
-            eventTypes: [
-              {
-                eventType: 'Error'
-              }
-              {
-                eventType: 'Warning'
-              }
-              {
-                eventType: 'Information'
-              }
-            ]
-            kind: 'WindowsEvent'
-            name: 'applicationEvent'
+            eventType: 'Error'
           }
           {
-            counterName: '% Processor Time'
-            instanceName: '*'
-            intervalSeconds: 60
-            kind: 'WindowsPerformanceCounter'
-            name: 'windowsPerfCounter1'
-            objectName: 'Processor'
+            eventType: 'Warning'
           }
           {
-            kind: 'IISLogs'
-            name: 'sampleIISLog1'
-            state: 'OnPremiseEnabled'
+            eventType: 'Information'
           }
         ]
+        kind: 'WindowsEvent'
+        name: 'applicationEvent'
+      }
+      {
+        counterName: '% Processor Time'
+        instanceName: '*'
+        intervalSeconds: 60
+        kind: 'WindowsPerformanceCounter'
+        name: 'windowsPerfCounter1'
+        objectName: 'Processor'
+      }
+      {
+        kind: 'IISLogs'
+        name: 'sampleIISLog1'
+        state: 'OnPremiseEnabled'
+      }
+    ]
   }
 }
 
@@ -165,13 +172,13 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2021-09-01' = {
     networkAcls: {
       defaultAction: 'Allow'
     }
-        
+
     publicNetworkAccess: 'Enabled'
     supportsHttpsTrafficOnly: true
   }
   tags: {
     SecurityControl: 'Ignore'
-  } 
+  }
   sku: {
     name: 'Standard_LRS'
   }
@@ -205,7 +212,10 @@ resource roleAssignmentBlob 'Microsoft.Authorization/roleAssignments@2022-04-01'
   name: guid(subscription().id, storageAccount.id, userAssignedIdentity.id, 'Storage Blob Data Contributor')
   scope: storageAccount
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      storageBlobDataContributorRoleId
+    )
     principalId: userAssignedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -261,8 +271,8 @@ module serverfarm 'br/public:avm/res/web/serverfarm:0.7.0' = {
     reserved: false
     skuName: 'Y1'
     diagnosticSettings: [
-      { 
-        workspaceResourceId: logAnalyticsWS!.outputs.resourceId 
+      {
+        workspaceResourceId: logAnalyticsWS!.outputs.resourceId
       }
     ]
     zoneRedundant: false
@@ -285,73 +295,84 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
     }
     keyVaultAccessIdentityResourceId: userAssignedIdentity.id
     siteConfig: {
-      appSettings: union([
-        {
-          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
-          value: applicationInsights.properties.InstrumentationKey
-        }
-        {
-          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-          value: applicationInsights.properties.ConnectionString
-        }
-        {
-          name: 'AZURE_CLIENT_ID'
-          value: userAssignedIdentity.properties.clientId
-        }
-        {
-          name: 'AzureWebJobsStorage__accountName'
-          value: storageAccount.name
-        }
-        {
-          name: 'AzureWebJobsStorage__clientId'
-          value: userAssignedIdentity.properties.clientId
-        }
-        {
-          name: 'AzureWebJobsStorage__credential'
-          value: 'managedidentity'
-        }
-        {
-          name: 'ENABLE_HTTP_ENDPOINT'
-          value: enableHTTPEndpoint
-        }
-        {
-          name: 'FUNCTIONS_EXTENSION_VERSION'
-          value: '~4'
-        }
-        {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'dotnet-isolated'
-        }
-        {
-          name: 'GITHUB_PAT'
-          value: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${gitHubSecret.name})'
-        }
-        {
-          name: 'TARGET_REPOSITORY'
-          value: targetRepository
-        }
-        {
-          name: 'WEBSITE_ENABLE_SYNC_UPDATE_SITE'
-          value: 'true'
-        }
-        {
-          name: 'WEBSITE_RUN_FROM_PACKAGE'
-          value: '1'
-        }
-        {
-          name: 'WEBSITE_USE_PLACEHOLDER_DOTNETISOLATED'
-          value: '1'
-        }
-
-      ],
-      empty(targetResourceGroup) ? [] : [
-        { name: 'TARGET_RESOURCE_GROUP', value: targetResourceGroup}
-      ]
+      appSettings: union(
+        [
+          {
+            name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+            value: applicationInsights.properties.InstrumentationKey
+          }
+          {
+            name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+            value: applicationInsights.properties.ConnectionString
+          }
+          {
+            name: 'AZURE_CLIENT_ID'
+            value: userAssignedIdentity.properties.clientId
+          }
+          {
+            name: 'AzureWebJobsStorage__accountName'
+            value: storageAccount.name
+          }
+          {
+            name: 'AzureWebJobsStorage__clientId'
+            value: userAssignedIdentity.properties.clientId
+          }
+          {
+            name: 'AzureWebJobsStorage__credential'
+            value: 'managedidentity'
+          }
+          {
+            name: 'ENABLE_HTTP_ENDPOINT'
+            value: enableHTTPEndpoint
+          }
+          {
+            name: 'FUNCTIONS_EXTENSION_VERSION'
+            value: '~4'
+          }
+          {
+            name: 'FUNCTIONS_WORKER_RUNTIME'
+            value: 'dotnet-isolated'
+          }
+          {
+            name: 'GITHUB_PAT'
+            value: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${gitHubSecret.name})'
+          }
+          {
+            name: 'TARGET_REPOSITORY'
+            value: targetRepository
+          }
+          {
+            name: 'WORKITEM_SCOPE'
+            value: workItemScope
+          }
+          {
+            name: 'WEBSITE_ENABLE_SYNC_UPDATE_SITE'
+            value: 'true'
+          }
+          {
+            name: 'WEBSITE_RUN_FROM_PACKAGE'
+            value: '1'
+          }
+          {
+            name: 'WEBSITE_USE_PLACEHOLDER_DOTNETISOLATED'
+            value: '1'
+          }
+        ],
+        empty(targetResourceGroup)
+          ? []
+          : [
+              { name: 'TARGET_RESOURCE_GROUP', value: targetResourceGroup }
+            ],
+        workItemScope == 'monolithic'
+          ? []
+          : [
+              { name: 'TARGET_RESOURCE_GROUP_MAPPING', value: resourceGroupRepositoryMap }
+            ]
       )
     }
-    diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId  }] 
+    diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId }]
     tags: {
       'azd-service-name': 'evergreen'
-    } 
+    }
   }
 }
