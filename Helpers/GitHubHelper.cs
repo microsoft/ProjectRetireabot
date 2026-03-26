@@ -7,6 +7,10 @@ namespace Retirebot.Helpers
 {
     public partial class GitHubHelper
     {
+        private const int MaxLabelLength = 50;
+        private const string AdvisoryLabelPrefix = "advisor-";
+        private const string ParentLabelPrefix = "advisor-type-";
+
         public async static Task<Dictionary<string, Issue>> FindExistingIssuesByLabelsAsync(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo)
         {
             Dictionary<string, Issue> existingIssues = new Dictionary<string, Issue>();
@@ -106,17 +110,24 @@ namespace Retirebot.Helpers
 
             if (results == null)
             {
-   return new List<Issue>();             
+                return new List<Issue>();             
             }
- return [.. results.Where(i => i != null).Select(i => i!)];
+            return [.. results.Where(i => i != null).Select(i => i!)];
         }
-
-        private const int MaxLabelLength = 50;
-        private const string AdvisoryLabelPrefix = "advisor-";
 
         private static string GetAdvisoryLabel(string advisoryName)
         {
             var label = $"{AdvisoryLabelPrefix}{advisoryName}";
+            if (label.Length > MaxLabelLength)
+            {
+                label = label[..MaxLabelLength];
+            }
+            return label;
+        }
+
+        private static string GetParentLabel(string recommendationTypeId)
+        {
+            var label = $"{ParentLabelPrefix}{recommendationTypeId}";
             if (label.Length > MaxLabelLength)
             {
                 label = label[..MaxLabelLength];
@@ -154,5 +165,151 @@ namespace Retirebot.Helpers
 `{advisory.Name}`
 ";
         }
+
+        /// <summary>
+        /// Parses task list items from a GitHub issue body.
+        /// Matches lines like: - [ ] owner/repo#123 or - [x] owner/repo#123
+        /// </summary>
+        private static HashSet<string> ParseTaskListReferences(string body)
+        {
+            var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrEmpty(body)) return references;
+
+            // Matches: - [ ] owner/repo#123 or - [x] owner/repo#123 or - [ ] #123
+            var matches = TaskListPattern().Matches(body);
+            foreach (Match match in matches)
+            {
+                references.Add(match.Groups["ref"].Value);
+            }
+
+            return references;
+        }
+
+        /// <summary>
+        /// Builds the full cross-repo issue reference (e.g., "owner/repo#42").
+        /// If the child is in the same repo as the parent, uses short form "#42".
+        /// </summary>
+        private static string GetIssueReference(Issue childIssue, string childRepo, string parentRepo)
+        {
+            return string.Equals(childRepo, parentRepo, StringComparison.OrdinalIgnoreCase)
+                ? $"#{childIssue.Number}"
+                : $"{childRepo}#{childIssue.Number}";
+        }
+
+        private static string GenerateParentIssueBody(Advisory representativeAdvisory, Dictionary<string, List<Issue>> childIssuesByRepo, string parentRepo)
+        {
+            var props = representativeAdvisory.Properties;
+            var taskListLines = childIssuesByRepo
+                .SelectMany(kvp => kvp.Value.Select(issue => $"- [ ] {GetIssueReference(issue, kvp.Key, parentRepo)}"))
+                .ToList();
+
+            return $@"## Retirement Tracking: {props.ShortDescription.Problem}
+
+**Impact:** {props.Impact}
+**Category:** {props.Category}
+**Retirement Date:** {props.ExtendedProperties?.RetirementDate}
+**Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}
+
+### Description
+{props.ShortDescription.Problem}
+
+### Solution
+{props.ShortDescription.Solution}
+
+### Affected Resources ({taskListLines.Count})
+{string.Join("\n", taskListLines)}
+
+### Recommendation Type ID
+`{props.RecommendationTypeId}`
+";
+        }
+
+        public static async Task<Issue?> FindOrCreateParentIssueAsync(ILogger logger, GitHubClient ghClient, string recommendationTypeId, string recommendationTitle, Advisory recommendationInfo, Dictionary<string, List<Issue>> childIssuesByRepo, string parentRepo)
+        {
+            string parentLabel = GetParentLabel(recommendationTypeId);
+            string[] repoParts = parentRepo.Split("/");
+
+            SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:{parentLabel}")
+            {
+                Type = IssueTypeQualifier.Issue,
+                Repos = new RepositoryCollection
+                    {
+                        parentRepo
+                    }
+            };
+
+            try
+            {
+                SearchIssuesResult results = await ghClient.Search.SearchIssues(searchRequest);
+                Issue? existingParent = results.Items.FirstOrDefault(i =>
+                    i.Labels.Any(l => l.Name == parentLabel)
+                );
+
+                if (existingParent == null)
+                {
+                    throw new ArgumentNullException("exisitingParent", "An exisiting parent cannot be found.");
+                }
+
+                HashSet<string> existingRefs = ParseTaskListReferences(existingParent.Body);
+
+                List<string> allRefs = childIssuesByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
+                List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
+
+                if (newRefs.Count() == 0)
+                {
+                    logger.LogInformation("Parent issue #{Number} for recommendation {TypeId} is already up to date", existingParent.Number, recommendationTypeId);
+                    return existingParent;
+                }
+
+                string newTaskLines = string.Join("\n", newRefs.Select(r => $"- [ ] {r}"));
+                string updatedBody = existingParent.Body.TrimEnd() + "\n" + newTaskLines + "\n";
+
+                IssueUpdate update = new IssueUpdate { Body = updatedBody };
+
+                // Reopen if it was closed, since new resources appeared
+                if (existingParent.State == ItemState.Closed)
+                {
+                    update.State = ItemState.Open;
+                    logger.LogInformation("Reopening parent issue #{Number} — new affected resources found", existingParent.Number);
+                }
+
+                Issue updated = await ghClient.Issue.Update(repoParts[0], repoParts[1], existingParent.Number, update);
+                logger.LogInformation("Updated parent issue #{Number} with {Count} new child references for recommendation {TypeId}",
+                    updated.Number, newRefs.Count, recommendationTypeId);
+
+                return updated;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to search for exisiting parent issue.");
+            }
+
+            try
+            {
+                NewIssue newIssue = new NewIssue($"Retirement Tracking: {recommendationInfo.Properties.ShortDescription.Problem}")
+                {
+                    Body = GenerateParentIssueBody(recommendationInfo, childIssuesByRepo, parentRepo)
+                };
+
+                // Add labels including the advisory GUID
+                newIssue.Labels.Add(parentLabel);
+                newIssue.Labels.Add("azure-advisor");
+                newIssue.Labels.Add("tracking");
+                newIssue.Labels.Add(recommendationInfo.Properties.Impact.ToLower());
+
+                var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
+                logger.LogInformation("Created parent issue #{Number} for recommendation {TypeId} with {Count} child issues",
+                    created.Number, recommendationTypeId, childIssuesByRepo.Values.Sum(i => i.Count));
+
+                return created;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", recommendationInfo.Name);
+            }
+            return null;
+        }
+        [GeneratedRegex(@"- \[[ x]\] (?<ref>[^\s]+#\d+)")]
+        private static partial Regex TaskListPattern();
     }
 }
