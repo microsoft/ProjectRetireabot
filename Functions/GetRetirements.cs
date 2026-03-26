@@ -1,5 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Octokit;
 using Retirebot.Helpers;
@@ -23,27 +24,30 @@ namespace Retirebot.Functions
 
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
-        public GetRetirements(ILoggerFactory loggerFactory, ManagementClient client, GitHubClient ghClient)
+        private readonly IConfiguration _config;
+
+        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, ManagementClient client, GitHubClient ghClient)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
             _ghClient = ghClient;
+            _config = config;
 
-            _targetRepository = Environment.GetEnvironmentVariable("TARGET_REPOSITORY") ?? throw new InvalidOperationException("TARGET_REPOSITORY is not configured.");
-            _workItemScope = Environment.GetEnvironmentVariable("WORKITEM_SCOPE") ?? "monolithic";
+            _targetRepository = _config.GetSection("GitHub:TargetRepository").Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
+            _workItemScope = _config.GetSection("Azure:WorkItemScope").Get<string>() ?? "monolithic";
 
-            string? mappingJson = Environment.GetEnvironmentVariable("TARGET_RESOURCE_GROUP_MAPPING");
+            string? mappingJson = _config.GetSection("Azure:TargetResourceGroupMapping").Get<string>();
             _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
-            string? rg = Environment.GetEnvironmentVariable("TARGET_RESOURCE_GROUP");
+            string? rg = _config.GetSection("Azure:TargetResourceGroup").Get<string>();
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
         }
 
         // Runs every Monday at 00:00 GMT
         [Function("GetRetirements")]
-        public async Task RunTimer([TimerTrigger("0 0 0 * * 1")] TimerInfo timerInfo)
+        public async Task RunTimer([TimerTrigger("%App:TimerTrigger%")] TimerInfo timerInfo)
         {
             _logger.LogInformation("Retrieving Retirements via Timer");
             await GetRetirementsASync();
@@ -53,11 +57,11 @@ namespace Retirebot.Functions
         [Function("GetRetirementsManual")]
         public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
         {
-            string? httpFlag = Environment.GetEnvironmentVariable("ENABLE_HTTP_ENDPOINT");
+            string? httpFlag = _config.GetSection("App:EnableHTTPEndpoint").Get<string>();
 
             if (httpFlag == null || httpFlag.ToLower() != "true")
             {
-                _logger.LogDebug("Manual Endpoint hit when ENABLE_HTTP_ENDPOINT is disabled");
+                _logger.LogDebug("Manual Endpoint hit when App:EnableHTTPEndpoint is disabled");
                 return req.CreateResponse(HttpStatusCode.NotFound);
             }
 

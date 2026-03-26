@@ -1,6 +1,7 @@
 using Azure.Identity;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -11,8 +12,12 @@ using System.Text.RegularExpressions;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
-builder.ConfigureFunctionsWebApplication();
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
 
+builder.ConfigureFunctionsWebApplication();
 builder.Services
      .AddApplicationInsightsTelemetryWorkerService()
      .ConfigureFunctionsApplicationInsights();
@@ -33,9 +38,15 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
+string? keyvaultUri = builder.Configuration.GetSection("KeyVault:Uri").Get<string>();
+if (keyvaultUri != null)
+{
+    builder.Configuration.AddAzureKeyVault(new Uri(keyvaultUri), new DefaultAzureCredential());
+}
+
 builder.Services.AddSingleton(new DefaultAzureCredential(new DefaultAzureCredentialOptions
 {
-    ManagedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID")
+    ManagedIdentityClientId = builder.Configuration.GetSection("AZURE_CLIENT_ID").Get<string>()
 }));
 
 builder.Services.AddTransient(sp =>
@@ -56,7 +67,7 @@ builder.Services.AddHttpClient<ManagementClient>(c =>
 
 builder.Services.AddSingleton(sp =>
 {
-    var pat = Environment.GetEnvironmentVariable("GITHUB_PAT") ?? throw new InvalidOperationException("GITHUB_PAT not configured");
+    var pat = builder.Configuration.GetSection("GitHub:PAT").Get<string>() ?? throw new InvalidOperationException("GitHub:PAT not configured");
 
     var appClient = new GitHubClient(new ProductHeaderValue("Retirebot"))
     {
@@ -66,12 +77,12 @@ builder.Services.AddSingleton(sp =>
     return appClient;
 });
 
-string? targetRepo = Environment.GetEnvironmentVariable("TARGET_REPOSITORY");
+string? targetRepo = builder.Configuration.GetSection("GitHub:TargetRepository").Get<string>();
 Regex RepoPattern = new Regex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$");
 
 if (targetRepo == null || !RepoPattern.IsMatch(targetRepo))
 {
-    throw new MissingFieldException("TARGET_REPOSITORY is empty or not in the expected 'owner/repo' format");
+    throw new MissingFieldException("GitHub:TargetRepository is empty or not in the expected 'owner/repo' format");
 }
 
 builder.Build().Run();
