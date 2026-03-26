@@ -265,5 +265,6 @@ __pycache__/
 
 # for obvious reasons
 private-key.pem
+appsettings.development.json
 
 main.parameters.json
