@@ -7,15 +7,8 @@ namespace Retirebot.Helpers
 {
     public partial class GitHubHelper
     {
-        public async static Task<Dictionary<string, Issue>> FindExistingIssuesByLabelsAsync(ILogger logger, GitHubClient ghClient, List<Advisory> advisories)
+        public async static Task<Dictionary<string, Issue>> FindExistingIssuesByLabelsAsync(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo)
         {
-            string? targetRepo = Environment.GetEnvironmentVariable("TARGET_REPOSITORY");
-
-            if (targetRepo == null)
-            {
-                throw new MissingFieldException("TARGET_REPOSITORY is empty ");
-            }
-
             Dictionary<string, Issue> existingIssues = new Dictionary<string, Issue>();
             const int batchSize = 5;
 
@@ -68,15 +61,8 @@ namespace Retirebot.Helpers
             return existingIssues;
         }
 
-        public async static Task<List<Issue>> CreateIssuesBatch(ILogger logger, GitHubClient ghClient, List<Advisory> advisories)
+        public async static Task<List<Issue>> CreateIssuesBatch(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo)
         {
-            string? targetRepo = Environment.GetEnvironmentVariable("TARGET_REPOSITORY");
-
-            if (targetRepo == null)
-            {
-                throw new MissingFieldException("TARGET_REPOSITORY is empty ");
-            }
-
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
 
             var created = advisories.Select(async advisory =>
