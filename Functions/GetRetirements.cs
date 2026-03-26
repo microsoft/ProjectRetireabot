@@ -22,6 +22,9 @@ namespace Retirebot.Functions
         private readonly string _workItemScope;
         private readonly List<AzureRepositoryMap> _rgRepoMapping;
 
+        private readonly bool _assignGHCP;
+        private readonly bool _enableHTTPEndpoint;
+
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
         private readonly IConfiguration _config;
@@ -41,11 +44,13 @@ namespace Retirebot.Functions
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
+            _assignGHCP = _config.GetSection("App:AssignGitHubCopilot").Get<bool>();
+            _enableHTTPEndpoint = _config.GetSection("App:EnableHTTPEndpoint").Get<bool>(); 
+
             string? rg = _config.GetSection("Azure:TargetResourceGroup").Get<string>();
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
         }
 
-        // Runs every Monday at 00:00 GMT
         [Function("GetRetirements")]
         public async Task RunTimer([TimerTrigger("%App:TimerTrigger%")] TimerInfo timerInfo)
         {
@@ -57,9 +62,7 @@ namespace Retirebot.Functions
         [Function("GetRetirementsManual")]
         public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
         {
-            string? httpFlag = _config.GetSection("App:EnableHTTPEndpoint").Get<string>();
-
-            if (httpFlag == null || httpFlag.ToLower() != "true")
+            if (!_enableHTTPEndpoint)
             {
                 _logger.LogDebug("Manual Endpoint hit when App:EnableHTTPEndpoint is disabled");
                 return req.CreateResponse(HttpStatusCode.NotFound);
@@ -136,7 +139,7 @@ namespace Retirebot.Functions
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
                     existingIssues.Count, advisoriesToCreate.Count, repo);
 
-                await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate, repo);
+                await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate, repo, _assignGHCP);
             }
 
             sw.Stop();

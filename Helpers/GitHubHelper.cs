@@ -61,7 +61,7 @@ namespace Retirebot.Helpers
             return existingIssues;
         }
 
-        public async static Task<List<Issue>> CreateIssuesBatch(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo)
+        public async static Task<List<Issue>> CreateIssuesBatch(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo, bool assignGHCP)
         {
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
 
@@ -81,7 +81,7 @@ namespace Retirebot.Helpers
                     newIssue.Labels.Add("azure-advisor");
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
-                    newIssue.Assignees.Add("copilot-swe-agent[bot]");
+                    if (assignGHCP) newIssue.Assignees.Add("copilot-swe-agent[bot]");
 
                     string[] repoParts = targetRepo.Split("/");
 
