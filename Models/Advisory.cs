@@ -16,7 +16,7 @@ namespace Retirebot.Models
 
         public string GetResourceGroupName()
         {
-            return Id.Split('/')[3];
+            return Id.Split('/')[4];
         }
 
         public string GetResourceName()

@@ -89,7 +89,7 @@ namespace Retirebot.Functions
 
             string resourceGroup = advisory.GetResourceGroupName();
 
-            var mapping = _repoMappings.FirstOrDefault(m =>
+            var mapping = _rgRepoMapping.FirstOrDefault(m =>
                 m.Type == AzureContainerType.ResourceGroup
                 && string.Equals(m.Name, resourceGroup, StringComparison.OrdinalIgnoreCase));
 
@@ -120,12 +120,20 @@ namespace Retirebot.Functions
                 }
             }
 
-            Dictionary<string, Issue> existingIssues = await GitHubHelper.FindExistingIssuesByLabelsAsync(_logger, _ghClient, advisories);
-            List<Advisory> advisoriesToCreate = advisories.Where(a => !existingIssues.ContainsKey(a.Name)).ToList();
+            Dictionary<string, List<Advisory>> advisoriesByRepo = advisories.GroupBy(GetRepositoryForAdvisory).ToDictionary(g => g.Key, g => g.ToList());
 
-            _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues", existingIssues.Count, advisoriesToCreate.Count);
+            foreach (var (repo, repoAdvisories) in advisoriesByRepo)
+            {
+                _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
 
-            var createdIssues = await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate);
+                Dictionary<string, Issue> existingIssues = await GitHubHelper.FindExistingIssuesByLabelsAsync(_logger, _ghClient, repoAdvisories);
+                List<Advisory> advisoriesToCreate = repoAdvisories.Where(a => !existingIssues.ContainsKey(a.Name)).ToList();
+
+                _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
+                    existingIssues.Count, advisoriesToCreate.Count, repo);
+
+                await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate);
+            }
 
             sw.Stop();
             _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
