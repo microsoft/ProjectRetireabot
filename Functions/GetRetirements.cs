@@ -25,6 +25,8 @@ namespace Retirebot.Functions
         private readonly bool _assignGHCP;
         private readonly bool _enableHTTPEndpoint;
 
+        private readonly bool _createParentIssues;
+
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
         private readonly IConfiguration _config;
@@ -39,13 +41,15 @@ namespace Retirebot.Functions
             _targetRepository = _config.GetSection("GitHub:TargetRepository").Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
             _workItemScope = _config.GetSection("Azure:WorkItemScope").Get<string>() ?? "monolithic";
 
+            _createParentIssues = config.GetSection("Azure:CreateParentIssues").Get<bool>();
+
             string? mappingJson = _config.GetSection("Azure:TargetResourceGroupMapping").Get<string>();
             _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
             _assignGHCP = _config.GetSection("App:AssignGitHubCopilot").Get<bool>();
-            _enableHTTPEndpoint = _config.GetSection("App:EnableHTTPEndpoint").Get<bool>(); 
+            _enableHTTPEndpoint = _config.GetSection("App:EnableHTTPEndpoint").Get<bool>();
 
             string? rg = _config.GetSection("Azure:TargetResourceGroup").Get<string>();
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
@@ -129,6 +133,12 @@ namespace Retirebot.Functions
 
             Dictionary<string, List<Advisory>> advisoriesByRepo = advisories.GroupBy(GetRepositoryForAdvisory).ToDictionary(g => g.Key, g => g.ToList());
 
+            // RecommendationTypeId -> (repo -> list of child issues)
+            Dictionary<string, Dictionary<string, List<Issue>>> childIssuesByType = [];
+
+            // RecommendationTypeId -> representative advisory (for title/description)
+            Dictionary<string, Advisory> representativeByType = [];
+
             foreach (var (repo, repoAdvisories) in advisoriesByRepo)
             {
                 _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
@@ -139,7 +149,52 @@ namespace Retirebot.Functions
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
                     existingIssues.Count, advisoriesToCreate.Count, repo);
 
-                await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate, repo, _assignGHCP);
+                List<Issue> createdIssues = await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate, repo, _assignGHCP);
+
+                if (_createParentIssues)
+                {
+                    // Map created issues back to their advisory by index
+                    var createdPairs = advisoriesToCreate.Zip(createdIssues, (advisory, issue) => (advisory, issue));
+
+                    // Map existing issues back to their advisory by name
+                    var existingPairs = existingIssues.Select(kvp =>
+                    {
+                        var advisory = repoAdvisories.First(a => a.Name == kvp.Key);
+                        return (advisory, issue: kvp.Value);
+                    });
+
+                    foreach (var (advisory, issue) in createdPairs.Concat(existingPairs))
+                    {
+                        string typeId = advisory.Properties.RecommendationTypeId;
+
+                        if (!childIssuesByType.ContainsKey(typeId))
+                        {
+                            childIssuesByType[typeId] = [];
+                            representativeByType[typeId] = advisory;
+                        }
+
+                        if (!childIssuesByType[typeId].ContainsKey(repo))
+                        {
+                            childIssuesByType[typeId][repo] = [];
+                        }
+
+                        childIssuesByType[typeId][repo].Add(issue);
+                    }
+                }
+            }
+
+            if (_createParentIssues)
+            {
+                foreach (var (typeId, childIssuesByRepo) in childIssuesByType)
+                {
+                    await GitHubHelper.FindOrCreateParentIssueAsync(
+                        _logger,
+                        _ghClient,
+                        typeId,
+                        representativeByType[typeId],
+                        childIssuesByRepo,
+                        _targetRepository);
+                }
             }
 
             sw.Stop();
