@@ -224,7 +224,7 @@ namespace Retirebot.Helpers
 ";
         }
 
-        public static async Task<Issue?> FindOrCreateParentIssueAsync(ILogger logger, GitHubClient ghClient, string recommendationTypeId, string recommendationTitle, Advisory recommendationInfo, Dictionary<string, List<Issue>> childIssuesByRepo, string parentRepo)
+        public static async Task<Issue?> FindOrCreateParentIssueAsync(ILogger logger, GitHubClient ghClient, string recommendationTypeId, Advisory recommendationInfo, Dictionary<string, List<Issue>> childIssuesByRepo, string parentRepo)
         {
             string parentLabel = GetParentLabel(recommendationTypeId);
             string[] repoParts = parentRepo.Split("/");
@@ -309,7 +309,7 @@ namespace Retirebot.Helpers
             }
             return null;
         }
-        [GeneratedRegex(@"- \[[ x]\] (?<ref>[^\s]+#\d+)")]
+        [GeneratedRegex(@"- \[[ x]\] (?<ref>([^\s]+)?#\d+)")]
         private static partial Regex TaskListPattern();
     }
 }
