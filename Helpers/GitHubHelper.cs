@@ -110,7 +110,7 @@ namespace Retirebot.Helpers
 
             if (results == null)
             {
-                return new List<Issue>();             
+                return new List<Issue>();
             }
             return [.. results.Where(i => i != null).Select(i => i!)];
         }
@@ -250,6 +250,7 @@ namespace Retirebot.Helpers
         {
             string parentLabel = GetParentLabel(recommendationTypeId);
             string[] repoParts = parentRepo.Split("/");
+            Issue? existingParent = null;
 
             SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:{parentLabel}")
             {
@@ -263,15 +264,17 @@ namespace Retirebot.Helpers
             try
             {
                 SearchIssuesResult results = await ghClient.Search.SearchIssues(searchRequest);
-                Issue? existingParent = results.Items.FirstOrDefault(i =>
+                existingParent = results.Items.FirstOrDefault(i =>
                     i.Labels.Any(l => l.Name == parentLabel)
                 );
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to search for existing parent issue.");
+            }
 
-                if (existingParent == null)
-                {
-                    throw new ArgumentNullException("exisitingParent", "An exisiting parent cannot be found.");
-                }
-
+            if (existingParent != null)
+            {
                 (HashSet<string> existingRefs, int startPos, int endPos) = ParseTaskListReferences(existingParent.Body);
 
                 List<string> allRefs = childIssuesByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
@@ -290,7 +293,9 @@ namespace Retirebot.Helpers
                 if (taskTitle.Success)
                 {
                     updatedBody = updatedBody.Substring(0, taskTitle.Index) + $"Affected Resources ({allRefs.Count})" + updatedBody.Substring(taskTitle.Index + taskTitle.Length);
-                } else {
+                }
+                else
+                {
                     updatedBody = updatedBody.Insert(startPos, $"\n### Affected Resources ({allRefs.Count})\n");
                 }
 
@@ -298,7 +303,7 @@ namespace Retirebot.Helpers
                 if (lastUpdated.Success)
                 {
                     updatedBody = updatedBody.Substring(0, lastUpdated.Index) + $"Last Updated\n`{DateTime.UtcNow.ToString("r")}`" + updatedBody.Substring(lastUpdated.Index + lastUpdated.Length);
-                } 
+                }
 
                 IssueUpdate update = new IssueUpdate { Body = updatedBody };
 
@@ -315,10 +320,8 @@ namespace Retirebot.Helpers
 
                 return updated;
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to search for exisiting parent issue.");
-            }
+
+            logger.LogInformation($"Cannot find existing parent, creating new parent issue for {recommendationTypeId}...");
 
             try
             {
