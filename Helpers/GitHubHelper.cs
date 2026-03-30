@@ -240,6 +240,9 @@ namespace Retirebot.Helpers
 
 ### Recommendation Type ID
 `{props.RecommendationTypeId}`
+
+### Last Updated
+`{DateTime.UtcNow.ToString("r")}`
 ";
         }
 
@@ -283,13 +286,19 @@ namespace Retirebot.Helpers
                 string newTaskLines = string.Join("\n", newRefs.Select(r => $"- [ ] {r}"));
                 string updatedBody = existingParent.Body.Insert(endPos, $"\n{newTaskLines}\n").TrimEnd();
 
-                var taskTitle = TaskListTitlePattern().Match(existingParent.Body);
+                var taskTitle = TaskListTitlePattern().Match(updatedBody);
                 if (taskTitle.Success)
                 {
                     updatedBody = updatedBody.Substring(0, taskTitle.Index) + $"Affected Resources ({allRefs.Count})" + updatedBody.Substring(taskTitle.Index + taskTitle.Length);
                 } else {
                     updatedBody = updatedBody.Insert(startPos, $"\n### Affected Resources ({allRefs.Count})\n");
                 }
+
+                var lastUpdated = LastUpdatedFormat().Match(updatedBody);
+                if (lastUpdated.Success)
+                {
+                    updatedBody = updatedBody.Substring(0, lastUpdated.Index) + $"Last Updated\n`{DateTime.UtcNow.ToString("r")}`" + updatedBody.Substring(lastUpdated.Index + lastUpdated.Length);
+                } 
 
                 IssueUpdate update = new IssueUpdate { Body = updatedBody };
 
@@ -341,5 +350,8 @@ namespace Retirebot.Helpers
 
         [GeneratedRegex(@"Affected Resources \(\d+\)")]
         private static partial Regex TaskListTitlePattern();
+
+        [GeneratedRegex(@"Last Updated\n`(.*)+`")]
+        private static partial Regex LastUpdatedFormat();
     }
 }
