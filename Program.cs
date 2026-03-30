@@ -57,7 +57,7 @@ builder.Services.AddTransient(sp =>
 builder.Services.AddHttpClient<ManagementClient>(c =>
 {
     c.BaseAddress = new Uri("https://management.azure.com/");
-    c.Timeout = TimeSpan.FromSeconds(30);
+    c.Timeout = TimeSpan.FromSeconds(60);
 })
     .AddHttpMessageHandler<AzureCredentialTokenHandler>()
         .AddPolicyHandler(Policy<HttpResponseMessage>
