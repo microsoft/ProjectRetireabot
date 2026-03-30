@@ -170,10 +170,13 @@ namespace Retirebot.Helpers
         /// Parses task list items from a GitHub issue body.
         /// Matches lines like: - [ ] owner/repo#123 or - [x] owner/repo#123
         /// </summary>
-        private static HashSet<string> ParseTaskListReferences(string body)
+        private static (HashSet<string>, int, int) ParseTaskListReferences(string body)
         {
             var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrEmpty(body)) return references;
+            if (string.IsNullOrEmpty(body)) return (references, -1, -1);
+
+            int startBlock = -1;
+            int endBlock = -1;
 
             // Matches: - [ ] owner/repo#123 or - [x] owner/repo#123 or - [ ] #123
             var matches = TaskListPattern().Matches(body);
@@ -182,7 +185,14 @@ namespace Retirebot.Helpers
                 references.Add(match.Groups["ref"].Value);
             }
 
-            return references;
+            if (matches.Count > 0)
+            {
+                startBlock = matches[0].Index;
+                var lastMatch = matches[^1];
+                endBlock = lastMatch.Index + lastMatch.Length;
+            }
+
+            return (references, startBlock, endBlock);
         }
 
         /// <summary>
@@ -203,12 +213,21 @@ namespace Retirebot.Helpers
                 .SelectMany(kvp => kvp.Value.Select(issue => $"- [ ] {GetIssueReference(issue, kvp.Key, parentRepo)}"))
                 .ToList();
 
+            List<string> detailsList = new List<string>();
+
+            if (!String.IsNullOrEmpty(props.ExtendedProperties?.RetirementDate))
+                detailsList.Add($"**Retirement Date:** {props.ExtendedProperties?.RetirementDate}");
+
+            if (!String.IsNullOrEmpty(props.ExtendedProperties?.RetirementFeatureName))
+                detailsList.Add($"**Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}");
+
+
             return $@"## Retirement Tracking: {props.ShortDescription.Problem}
 
 **Impact:** {props.Impact}
 **Category:** {props.Category}
-**Retirement Date:** {props.ExtendedProperties?.RetirementDate}
-**Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}
+
+{string.Join("\n", detailsList)}
 
 ### Description
 {props.ShortDescription.Problem}
@@ -250,7 +269,7 @@ namespace Retirebot.Helpers
                     throw new ArgumentNullException("exisitingParent", "An exisiting parent cannot be found.");
                 }
 
-                HashSet<string> existingRefs = ParseTaskListReferences(existingParent.Body);
+                (HashSet<string> existingRefs, int startPos, int endPos) = ParseTaskListReferences(existingParent.Body);
 
                 List<string> allRefs = childIssuesByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
                 List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
@@ -262,7 +281,15 @@ namespace Retirebot.Helpers
                 }
 
                 string newTaskLines = string.Join("\n", newRefs.Select(r => $"- [ ] {r}"));
-                string updatedBody = existingParent.Body.TrimEnd() + "\n" + newTaskLines + "\n";
+                string updatedBody = existingParent.Body.Insert(endPos, $"\n{newTaskLines}\n").TrimEnd();
+
+                var taskTitle = TaskListTitlePattern().Match(existingParent.Body);
+                if (taskTitle.Success)
+                {
+                    updatedBody = updatedBody.Substring(0, taskTitle.Index) + $"Affected Resources ({allRefs.Count})" + updatedBody.Substring(taskTitle.Index + taskTitle.Length);
+                } else {
+                    updatedBody = updatedBody.Insert(startPos, $"\n### Affected Resources ({allRefs.Count})\n");
+                }
 
                 IssueUpdate update = new IssueUpdate { Body = updatedBody };
 
@@ -311,5 +338,8 @@ namespace Retirebot.Helpers
         }
         [GeneratedRegex(@"- \[[ x]\] (?<ref>([^\s]+)?#\d+)")]
         private static partial Regex TaskListPattern();
+
+        [GeneratedRegex(@"Affected Resources \(\d+\)")]
+        private static partial Regex TaskListTitlePattern();
     }
 }
