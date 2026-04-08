@@ -19,7 +19,7 @@ namespace Retirebot.Functions
         private readonly string _advisoryQuery;
 
         private readonly string _targetRepository;
-        private readonly string _workItemScope;
+        private readonly WorkItemScope _workItemScope;
         private readonly List<AzureRepositoryMap> _rgRepoMapping;
 
         private readonly bool _assignGHCP;
@@ -39,7 +39,7 @@ namespace Retirebot.Functions
             _config = config;
 
             _targetRepository = _config.GetSection("GitHub:TargetRepository").Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
-            _workItemScope = _config.GetSection("Azure:WorkItemScope").Get<string>() ?? "monolithic";
+            _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection("Azure:WorkItemScope").Get<string>() ?? "monolithic", true);
 
             _createParentIssues = config.GetSection("Azure:CreateParentIssues").Get<bool>();
 
@@ -93,7 +93,7 @@ namespace Retirebot.Functions
 
         private string GetRepositoryForAdvisory(Advisory advisory)
         {
-            if (_workItemScope != "perResourceGroup")
+            if (_workItemScope != WorkItemScope.PerResourceGroup)
             {
                 return _targetRepository;
             }
