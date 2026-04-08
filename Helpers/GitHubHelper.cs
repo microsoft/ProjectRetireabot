@@ -65,10 +65,18 @@ namespace Retirebot.Helpers
             return existingIssues;
         }
 
-        public async static Task<List<Issue>> CreateIssuesBatch(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo, bool assignGHCP)
+        public async static Task<List<(Advisory, Issue)>> CreateIssuesBatch(ILogger logger, GitHubCredentialProvider ghProvider, List<Advisory> advisories, string targetRepo, bool assignGHCP)
         {
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
-
+            
+            GitHubClient? ghClient = ghProvider.GetCopilotCapableClient();
+            if (ghClient == null)
+            {
+                ghClient = ghProvider.GetPrimaryClient();
+                assignGHCP = false;
+                logger.LogWarning("Attempted to assign an issue to CoPilot without a capable client. Please check your GitHub Credentials.");
+            }
+            
             var created = advisories.Select(async advisory =>
             {
                 await semaphore.WaitAsync();
@@ -110,9 +118,11 @@ namespace Retirebot.Helpers
 
             if (results == null)
             {
-                return new List<Issue>();
+                return new List<(Advisory, Issue)>();
             }
-            return [.. results.Where(i => i != null).Select(i => i!)];
+            return [.. results.Select((r, i) => (advisory: advisories[i], issue: r))
+                  .Where(p => p.issue != null)
+                  .Select(p => (p.advisory, p.issue!))];
         }
 
         private static string GetAdvisoryLabel(string advisoryName)
@@ -242,7 +252,7 @@ namespace Retirebot.Helpers
 `{props.RecommendationTypeId}`
 
 ### Last Updated
-`{DateTime.UtcNow.ToString("r")}`
+`{DateTime.UtcNow:r}`
 ";
         }
 
@@ -275,7 +285,7 @@ namespace Retirebot.Helpers
 
             if (existingParent != null)
             {
-                (HashSet<string> existingRefs, int startPos, int endPos) = ParseTaskListReferences(existingParent.Body);
+                (HashSet<string> existingRefs, _, _) = ParseTaskListReferences(existingParent.Body);
 
                 List<string> allRefs = childIssuesByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
                 List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
@@ -286,24 +296,15 @@ namespace Retirebot.Helpers
                     return existingParent;
                 }
 
-                string newTaskLines = string.Join("\n", newRefs.Select(r => $"- [ ] {r}"));
-                string updatedBody = existingParent.Body.Insert(endPos, $"\n{newTaskLines}\n").TrimEnd();
+                var existingTaskLines = TaskListPattern().Matches(existingParent.Body).Select(m => m.Value.Trim());
+                var allTaskLines = existingTaskLines.Concat(newRefs.Select(r => $"- [ ] {r}"));
+                string newSection = $"### Affected Resources ({allRefs.Count})\n{string.Join("\n", allTaskLines)}\n";
 
-                var taskTitle = TaskListTitlePattern().Match(updatedBody);
-                if (taskTitle.Success)
-                {
-                    updatedBody = updatedBody.Substring(0, taskTitle.Index) + $"Affected Resources ({allRefs.Count})" + updatedBody.Substring(taskTitle.Index + taskTitle.Length);
-                }
-                else
-                {
-                    updatedBody = updatedBody.Insert(startPos, $"\n### Affected Resources ({allRefs.Count})\n");
-                }
+                string updatedBody = AffectedResourcesSectionPattern().Replace(existingParent.Body, newSection);
+                if (updatedBody == existingParent.Body)
+                    updatedBody += $"\n{newSection}";
 
-                var lastUpdated = LastUpdatedFormat().Match(updatedBody);
-                if (lastUpdated.Success)
-                {
-                    updatedBody = updatedBody.Substring(0, lastUpdated.Index) + $"Last Updated\n`{DateTime.UtcNow.ToString("r")}`" + updatedBody.Substring(lastUpdated.Index + lastUpdated.Length);
-                }
+                updatedBody = LastUpdatedFormat().Replace(updatedBody, $"Last Updated\n`{DateTime.UtcNow:r}`");
 
                 IssueUpdate update = new IssueUpdate { Body = updatedBody };
 
@@ -348,11 +349,11 @@ namespace Retirebot.Helpers
             }
             return null;
         }
-        [GeneratedRegex(@"- \[[ x]\] (?<ref>([^\s]+)?#\d+)")]
+        [GeneratedRegex(@"- \[[ x]{1,2}\] (?<ref>([^\s]+)?#\d+)")]
         private static partial Regex TaskListPattern();
 
-        [GeneratedRegex(@"Affected Resources \(\d+\)")]
-        private static partial Regex TaskListTitlePattern();
+        [GeneratedRegex(@"### Affected Resources \(\d+\)(\n+(?:- \[[ x]{1,2}\] [^\n]+\n?)+)")]
+        private static partial Regex AffectedResourcesSectionPattern();
 
         [GeneratedRegex(@"Last Updated\n`(.*)+`")]
         private static partial Regex LastUpdatedFormat();

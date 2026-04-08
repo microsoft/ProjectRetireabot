@@ -5,7 +5,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Octokit;
 using Polly;
 using Retirebot.Helpers;
 using System.Text.RegularExpressions;
@@ -65,17 +64,7 @@ builder.Services.AddHttpClient<ManagementClient>(c =>
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
         .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
 
-builder.Services.AddSingleton(sp =>
-{
-    var pat = builder.Configuration.GetSection("GitHub:PAT").Get<string>() ?? throw new InvalidOperationException("GitHub:PAT not configured");
-
-    var appClient = new GitHubClient(new ProductHeaderValue("Retirebot"))
-    {
-        Credentials = new Credentials(pat)
-    };
-
-    return appClient;
-});
+builder.Services.AddSingleton<GitHubCredentialProvider>();
 
 string? targetRepo = builder.Configuration.GetSection("GitHub:TargetRepository").Get<string>();
 Regex RepoPattern = new Regex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$");

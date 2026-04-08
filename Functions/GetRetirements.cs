@@ -15,7 +15,7 @@ namespace Retirebot.Functions
     {
         private readonly ILogger _logger;
         private readonly ManagementClient _managementClient;
-        private readonly GitHubClient _ghClient;
+        private readonly GitHubCredentialProvider _ghProvider;
         private readonly string _advisoryQuery;
 
         private readonly string _targetRepository;
@@ -31,12 +31,13 @@ namespace Retirebot.Functions
 
         private readonly IConfiguration _config;
 
-        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, ManagementClient client, GitHubClient ghClient)
+        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, ManagementClient client, GitHubCredentialProvider credentialProvider)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
-            _ghClient = ghClient;
             _config = config;
+
+            _ghProvider = credentialProvider;
 
             _targetRepository = _config.GetSection("GitHub:TargetRepository").Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
             _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection("Azure:WorkItemScope").Get<string>() ?? "monolithic", true);
@@ -143,19 +144,16 @@ namespace Retirebot.Functions
             {
                 _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
 
-                Dictionary<string, Issue> existingIssues = await GitHubHelper.FindExistingIssuesByLabelsAsync(_logger, _ghClient, repoAdvisories, repo);
+                Dictionary<string, Issue> existingIssues = await GitHubHelper.FindExistingIssuesByLabelsAsync(_logger, _ghProvider.GetPrimaryClient(), repoAdvisories, repo);
                 List<Advisory> advisoriesToCreate = repoAdvisories.Where(a => !existingIssues.ContainsKey(a.Name)).ToList();
 
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
                     existingIssues.Count, advisoriesToCreate.Count, repo);
 
-                List<Issue> createdIssues = await GitHubHelper.CreateIssuesBatch(_logger, _ghClient, advisoriesToCreate, repo, _assignGHCP);
+                List<(Advisory, Issue)> createdIssues = await GitHubHelper.CreateIssuesBatch(_logger, _ghProvider, advisoriesToCreate, repo, _assignGHCP);
 
                 if (_createParentIssues)
                 {
-                    // Map created issues back to their advisory by index
-                    var createdPairs = advisoriesToCreate.Zip(createdIssues, (advisory, issue) => (advisory, issue));
-
                     // Map existing issues back to their advisory by name
                     var existingPairs = existingIssues.Select(kvp =>
                     {
@@ -163,7 +161,7 @@ namespace Retirebot.Functions
                         return (advisory, issue: kvp.Value);
                     });
 
-                    foreach (var (advisory, issue) in createdPairs.Concat(existingPairs))
+                    foreach (var (advisory, issue) in createdIssues.Concat(existingPairs))
                     {
                         string typeId = advisory.Properties.RecommendationTypeId;
 
@@ -189,7 +187,7 @@ namespace Retirebot.Functions
                 {
                     await GitHubHelper.FindOrCreateParentIssueAsync(
                         _logger,
-                        _ghClient,
+                        _ghProvider.GetPrimaryClient(),
                         typeId,
                         representativeByType[typeId],
                         childIssuesByRepo,
