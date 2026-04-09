@@ -144,7 +144,7 @@ namespace Retirebot.Functions
             {
                 _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
 
-                Dictionary<string, Issue> existingIssues = await GitHubHelper.FindExistingIssuesByLabelsAsync(_logger, _ghProvider.GetPrimaryClient(), repoAdvisories, repo);
+                Dictionary<string, Issue> existingIssues = await GitHubHelper.FindExistingIssuesByLabelsAsync(_logger, await _ghProvider.GetPrimaryClient(), repoAdvisories, repo);
                 List<Advisory> advisoriesToCreate = repoAdvisories.Where(a => !existingIssues.ContainsKey(a.Name)).ToList();
 
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
@@ -187,7 +187,7 @@ namespace Retirebot.Functions
                 {
                     await GitHubHelper.FindOrCreateParentIssueAsync(
                         _logger,
-                        _ghProvider.GetPrimaryClient(),
+                        await _ghProvider.GetPrimaryClient(),
                         typeId,
                         representativeByType[typeId],
                         childIssuesByRepo,

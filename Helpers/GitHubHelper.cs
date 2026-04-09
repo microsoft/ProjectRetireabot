@@ -72,7 +72,7 @@ namespace Retirebot.Helpers
             GitHubClient? ghClient = ghProvider.GetCopilotCapableClient();
             if (ghClient == null)
             {
-                ghClient = ghProvider.GetPrimaryClient();
+                ghClient = await ghProvider.GetPrimaryClient();
                 assignGHCP = false;
                 logger.LogWarning("Attempted to assign an issue to CoPilot without a capable client. Please check your GitHub Credentials.");
             }
