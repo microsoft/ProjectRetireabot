@@ -1,4 +1,6 @@
+using Azure.Core;
 using Azure.Identity;
+using Azure.Security.KeyVault.Keys;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
@@ -37,16 +39,20 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
+DefaultAzureCredential credentials = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+{
+    ManagedIdentityClientId = builder.Configuration.GetSection("AZURE_CLIENT_ID").Get<string>()
+});
+builder.Services.AddSingleton(credentials);
+
 string? keyvaultUri = builder.Configuration.GetSection("KeyVault:Uri").Get<string>();
 if (keyvaultUri != null)
 {
-    builder.Configuration.AddAzureKeyVault(new Uri(keyvaultUri), new DefaultAzureCredential());
-}
+    Uri KeyVaultUri = new Uri(keyvaultUri);
 
-builder.Services.AddSingleton(new DefaultAzureCredential(new DefaultAzureCredentialOptions
-{
-    ManagedIdentityClientId = builder.Configuration.GetSection("AZURE_CLIENT_ID").Get<string>()
-}));
+    builder.Services.AddSingleton(sp => new KeyClient(KeyVaultUri, credentials));
+    builder.Configuration.AddAzureKeyVault(KeyVaultUri, credentials);
+}
 
 builder.Services.AddTransient(sp =>
     new AzureCredentialTokenHandler(
