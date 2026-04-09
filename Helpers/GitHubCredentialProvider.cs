@@ -41,14 +41,15 @@ namespace Retirebot.Helpers
             
             string? appId = config.GetSection("GitHub:AppId").Get<string>();
             string? appPrivateKeyId = config.GetSection("GitHub:AppPrivateKeyId").Get<string>();
+            long? installId = config.GetSection("GitHub:AppInstallId").Get<long?>();
 
-            AuthMode = (!string.IsNullOrEmpty(pat) ? GitHubAuthMode.PAT : GitHubAuthMode.None) | (!string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(appPrivateKeyId) ? GitHubAuthMode.App : GitHubAuthMode.None);
+            AuthMode = (!string.IsNullOrEmpty(pat) ? GitHubAuthMode.PAT : GitHubAuthMode.None) | (!string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(appPrivateKeyId) && installId != null ? GitHubAuthMode.App : GitHubAuthMode.None);
         
             switch (AuthMode)
             {
                 case GitHubAuthMode.Hybrid:
                     logger.LogInformation("GitHub AuthMode: Hybrid - App (Primary) + PAT (Secondary)");
-                    _primaryClient = CreateClient(appId!, appPrivateKeyId!);
+                    _primaryClient = CreateClient(appId!, appPrivateKeyId!, installId!.Value);
                     _coPilotClient = CreateClient(pat!);
                     break;
                 case GitHubAuthMode.PAT:
@@ -58,7 +59,7 @@ namespace Retirebot.Helpers
                     break;
                 case GitHubAuthMode.App:
                     logger.LogInformation("GitHub AuthMode: App mode");
-                    _primaryClient = CreateClient(appId!, appPrivateKeyId!);
+                    _primaryClient = CreateClient(appId!, appPrivateKeyId!, installId!.Value);
                     break;
                 case GitHubAuthMode.None:
                 default:
@@ -77,7 +78,7 @@ namespace Retirebot.Helpers
             };
         }
 
-        private GitHubClient CreateClient(string appId, string privateKeyId)
+        private GitHubClient CreateClient(string appId, string privateKeyId, long installId)
         {
             if (_keyClient == null)
             {
@@ -91,6 +92,17 @@ namespace Retirebot.Helpers
             }
 
             CryptographyClient cryptoClient = _keyClient.GetCryptographyClient(key.Name, key.Properties.Version);
+            KeyVaultSecurityKey securityKey = new KeyVaultSecurityKey(key.Id.ToString(), async(auth, resource, scope) =>
+            {
+                var token = await _credentials.GetTokenAsync(
+                    new TokenRequestContext(new[] { resource + "/.default" }));
+                return token.Token; 
+            });
+
+            SigningCredentials signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.RsaSha256)
+            {
+                CryptoProviderFactory = new CryptoProviderFactory() { CustomCryptoProvider = new KeyVaultCryptoProvider() }
+            };
 
             DateTimeOffset now = DateTimeOffset.UtcNow;
             List<System.Security.Claims.Claim> claims = new List<System.Security.Claims.Claim>
@@ -100,27 +112,23 @@ namespace Retirebot.Helpers
                     new System.Security.Claims.Claim("iss", appId.ToString())
                 };
 
-            SigningCredentials signingCredentials = new SigningCredentials(new EmptySecurityKey(), SecurityAlgorithms.RsaSha256);
-
             JwtHeader jwtHeader = new JwtHeader(signingCredentials);
             JwtPayload jwtPayload = new JwtPayload((IEnumerable<System.Security.Claims.Claim>)claims);
             JwtSecurityToken jwt = new JwtSecurityToken(jwtHeader, jwtPayload);
 
-            string headerBase64 = jwtHeader.Base64UrlEncode();
-            string payloadBase64 = jwtPayload.Base64UrlEncode();
-            string unsignedToken = $"{headerBase64}.{payloadBase64}";
+            string token = new JwtSecurityTokenHandler().WriteToken(jwt);
 
-            byte[] digest = System.Security.Cryptography.SHA256.HashData(
-               System.Text.Encoding.UTF8.GetBytes(unsignedToken));
+            // have to get an install authenticated GitHubClient to do operations
 
-            SignResult signResult = cryptoClient.Sign(SignatureAlgorithm.RS256, digest);
+            GitHubClient intermediate = new GitHubClient(new ProductHeaderValue("Retirebot"))
+            {
+                Credentials = new Credentials(token, AuthenticationType.Bearer)
+            };
 
-            string signature = Base64UrlEncoder.Encode(signResult.Signature);
-            string signedToken = $"{unsignedToken}.{signature}";
-
+            var response = intermediate.GitHubApps.CreateInstallationToken(installId).Result;
             return new GitHubClient(new ProductHeaderValue("Retirebot"))
             {
-                Credentials = new Credentials(signedToken, AuthenticationType.Bearer)
+                Credentials = new Credentials(response.Token)
             };
         }
     }
