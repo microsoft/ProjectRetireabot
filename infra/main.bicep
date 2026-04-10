@@ -18,8 +18,21 @@ param deploymentUniqueText string = take(uniqueString(subscription().id, resourc
 @metadata({ azd: { type: 'location' } })
 param location string
 
+@secure()
 @description('The PAT that allows EverGreen to interact with your GitHub repository.')
-param githubPAT string
+param gitHubPAT string
+
+@description('App Id of the registered GitHub App')
+param gitHubAppId string
+
+@description('The install id of the GitHub App to be used for actions on repositories')
+param gitHubInstallId string
+
+@description('The id the private key for access to the GitHub App should be stored as in the KeyVault')
+param gitHubPrivateKeyId string
+
+@description('The path of the private key to be stored in the KeyVault for the GitHub App')
+param gitHubPrivateKeyPath string
 
 @description('Target GitHub Repository to create issues on from advisories')
 param targetRepository string
@@ -55,6 +68,22 @@ var deploymentSuffix = toLower(trim(replace(
   ''
 )))
 
+var gitHubCredentialValidation = empty(gitHubPAT) && empty(gitHubAppId) && empty(gitHubInstallId) && empty(gitHubPrivateKeyId)
+  ? fail('You must provide at least one way of authenticating with GitHub (PAT or App)')
+  : null
+
+var gitHubAppParamsPopulated = [
+  !empty(gitHubAppId) ? 1 : 0
+  !empty(gitHubInstallId) ? 1 : 0
+  !empty(gitHubPrivateKeyId) ? 1 : 0
+  !empty(gitHubPrivateKeyPath) ? 1 : 0
+]
+
+var gitHubParamCount = reduce(gitHubAppParamsPopulated, 0, (cur, next) => cur + next)
+var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4)
+  ? fail('To use GitHub App authentication, you need to populate all required fields')
+  : null
+
 var keyVaultResourceName = 'kv-${deploymentSuffix}'
 resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
   name: keyVaultResourceName
@@ -76,11 +105,11 @@ resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
   }
 }
 
-resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = {
+resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (gitHubCredentialValidation != null && !empty(gitHubPAT)) {
   parent: vault
   name: 'GithubPAT'
   properties: {
-    value: githubPAT
+    value: gitHubPAT
   }
 }
 
@@ -190,8 +219,9 @@ resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@
   location: location
 }
 
+var subscriptionRoleAssignmentsName = 'sra-${deploymentSuffix}'
 module subscriptionRoleAssignments 'subscriptionRoleAssignments.bicep' = {
-  name: 'subscriptionRoleAssignments'
+  name: subscriptionRoleAssignmentsName
   scope: subscription()
   params: {
     principalId: userAssignedIdentity.properties.principalId
@@ -334,8 +364,8 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: 'dotnet-isolated'
           }
           {
-            name: 'GITHUB_PAT'
-            value: '@Microsoft.KeyVault(VaultName=${vault.name};SecretName=${gitHubSecret.name})'
+            name: 'KeyVault__Uri'
+            value: vault.properties.vaultUri
           }
           {
             name: 'TARGET_REPOSITORY'
@@ -358,6 +388,22 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: '1'
           }
         ],
+        gitHubParamCountValidation == null || gitHubParamCount != 4
+          ? []
+          : [
+              {
+                name: 'GitHub__AppId'
+                value: gitHubAppId
+              }
+              {
+                name: 'GitHub__AppInstallId'
+                value: gitHubInstallId
+              }
+              {
+                name: 'GitHub__AppPrivateKeyId'
+                value: gitHubPrivateKeyId
+              }
+            ],
         empty(targetResourceGroup)
           ? []
           : [
@@ -376,3 +422,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
     }
   }
 }
+
+output GITHUB_PRIVATE_KEY_ID string = gitHubParamCount == 4 ? gitHubPrivateKeyId : ''
+output GITHUB_PRIVATE_KEY_PATH string = gitHubParamCount == 4 ? gitHubPrivateKeyPath : ''
+output AZURE_KEY_VAULT_NAME string = vault.name

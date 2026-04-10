@@ -6,3 +6,7 @@ services:
     project: .
     language: dotnet
     host: function
+hooks:
+  postprovision:
+    shell: pwsh
+    run: ./infra/scripts/post-provision.ps1
