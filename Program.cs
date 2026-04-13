@@ -9,7 +9,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Retirebot.Helpers;
-using System.Text.RegularExpressions;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -72,12 +71,8 @@ builder.Services.AddHttpClient<ManagementClient>(c =>
 
 builder.Services.AddSingleton<GitHubCredentialProvider>();
 
-string? targetRepo = builder.Configuration.GetSection("GitHub:TargetRepository").Get<string>();
-Regex RepoPattern = new Regex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$");
+var app = builder.Build();
 
-if (targetRepo == null || !RepoPattern.IsMatch(targetRepo))
-{
-    throw new MissingFieldException("GitHub:TargetRepository is empty or not in the expected 'owner/repo' format");
-}
+PreflightChecks.StartPreflightChecks(builder.Configuration, app.Services.GetRequiredService<ILoggerFactory>());
 
-builder.Build().Run();
+app.Run();

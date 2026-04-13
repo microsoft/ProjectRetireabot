@@ -73,8 +73,7 @@ namespace Retirebot.Helpers
             if (ghClient == null)
             {
                 ghClient = await ghProvider.GetPrimaryClient();
-                assignGHCP = false;
-                logger.LogWarning("Attempted to assign an issue to CoPilot without a capable client. Please check your GitHub Credentials.");
+                logger.LogWarning("Attempting to use a non-CoPilot capable client, issue creation may fail");
             }
             
             var created = advisories.Select(async advisory =>
