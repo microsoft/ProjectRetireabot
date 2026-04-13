@@ -289,7 +289,7 @@ namespace Retirebot.Helpers
                 List<string> allRefs = childIssuesByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
                 List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
 
-                if (newRefs.Count() == 0)
+                if (newRefs.Count == 0)
                 {
                     logger.LogInformation("Parent issue #{Number} for recommendation {TypeId} is already up to date", existingParent.Number, recommendationTypeId);
                     return existingParent;
