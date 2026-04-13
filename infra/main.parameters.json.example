@@ -8,8 +8,20 @@
     "location": {
       "value": "uksouth"
     },
-    "githubPAT": {
-      "value": ""
+    "gitHubPAT": {
+      "value": "ghp_blahblahblah"
+    },
+    "gitHubAppId": {
+      "value": "12345"
+    },
+    "gitHubInstallId": {
+      "value": "12345"
+    },
+    "gitHubPrivateKeyId": {
+      "value": "test-key"
+    },
+    "gitHubPrivateKeyPath": {
+      "value": "infra/private-key.pem"
     },
     "targetRepository": {
       "value": ""
