@@ -1,5 +1,9 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Azure.Functions.Worker.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Retirebot.Models;
 using System.Text.RegularExpressions;
 
 namespace Retirebot.Helpers
@@ -9,26 +13,20 @@ namespace Retirebot.Helpers
         [GeneratedRegex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$")]
         public static partial Regex RepoPattern();
 
-        public static void StartPreflightChecks(IConfiguration config, ILoggerFactory loggerFactory)
+        public static void StartPreflightChecks(FunctionsApplicationBuilder hostBuilder, IHost host)
         {
-            ILogger logger = loggerFactory.CreateLogger("PreflightChecks");
+            ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PreflightChecks");
 
-            CheckTargetRepository(config);
-            CheckGitHubAuth(config, logger);
+            CheckTargetRepository(hostBuilder.Configuration);
+            CheckGitHubAuth(hostBuilder.Configuration, host, logger);
         }
 
-        public static void CheckGitHubAuth(IConfiguration config, ILogger logger)
+        public static void CheckGitHubAuth(IConfiguration config, IHost host, ILogger logger)
         {
-            string? appId = config.GetSection("GitHub:AppId").Get<string>();
-            string? appPrivateKeyId = config.GetSection("GitHub:AppPrivateKeyId").Get<string>();
-            long? appInstallId = config.GetSection("GitHub:AppInstallId").Get<long?>();
-            bool assignGHCP = config.GetSection("App:AssignGitHubCopilot").Get<bool>();
+            GitHubAuthModeService service = host.Services.GetRequiredService<GitHubAuthModeService>();
+            bool assignGHCP = config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool>();
 
-            string? pat = config.GetSection("GitHub:PAT").Get<string>();
-
-            GitHubAuthMode AuthMode = (!string.IsNullOrEmpty(pat) ? GitHubAuthMode.PAT : GitHubAuthMode.None) | (!string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(appPrivateKeyId) && appInstallId != null ? GitHubAuthMode.App : GitHubAuthMode.None);
-
-            switch (AuthMode)
+            switch (service.GetAuthMode())
             {
                 case GitHubAuthMode.Hybrid:
                     logger.LogInformation("Using Hybrid GitHub authentication (PAT + App)");
@@ -50,7 +48,7 @@ namespace Retirebot.Helpers
 
         public static void CheckTargetRepository(IConfiguration config)
         {
-            string? targetRepo = config.GetSection("GitHub:TargetRepository").Get<string>();
+            string? targetRepo = config.GetSection(ConfigKeys.GitHub.TargetRepository).Get<string>();
 
 
             if (targetRepo == null || !RepoPattern().IsMatch(targetRepo))

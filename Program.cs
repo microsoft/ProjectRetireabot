@@ -70,10 +70,11 @@ builder.Services.AddHttpClient<ManagementClient>(c =>
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
         .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
 
+builder.Services.AddSingleton<GitHubAuthModeService>();
 builder.Services.AddSingleton<GitHubCredentialProvider>();
 
 var app = builder.Build();
 
-PreflightChecks.StartPreflightChecks(builder.Configuration, app.Services.GetRequiredService<ILoggerFactory>());
+PreflightChecks.StartPreflightChecks(builder, app);
 
 app.Run();

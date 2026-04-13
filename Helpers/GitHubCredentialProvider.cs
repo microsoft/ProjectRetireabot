@@ -12,15 +12,6 @@ using System.IdentityModel.Tokens.Jwt;
 
 namespace Retirebot.Helpers
 {
-    [Flags]
-    public enum GitHubAuthMode
-    {
-        None = 0,
-        PAT = 1 << 0,     
-        App = 1 << 1,     
-        Hybrid = PAT | App  
-    }
-
     public class GitHubCredentialProvider
     {
         private GitHubClient _primaryClient;
@@ -30,38 +21,28 @@ namespace Retirebot.Helpers
         private readonly DefaultAzureCredential _credentials;
         private readonly ILogger _logger;
 
-        private readonly string? _appId;
-        private readonly string? _appPrivateKeyId;
-        private readonly long? _appInstallId;
         private DateTimeOffset _tokenExpiry = DateTimeOffset.MinValue;
         private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
-        public GitHubAuthMode AuthMode { get; }
+        private readonly GitHubAuthModeService _authModeSrv;
 
-        public GitHubCredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, DefaultAzureCredential credentials, KeyClient? keyClient)
+        public GitHubCredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, DefaultAzureCredential credentials, GitHubAuthModeService authModeService, KeyClient? keyClient)
         {
+            _authModeSrv = authModeService;
             _keyClient = keyClient;
             _credentials = credentials;
             _logger = loggerFactory.CreateLogger<GitHubCredentialProvider>();
 
-            _appId = config.GetSection(ConfigKeys.GitHub.AppId).Get<string>();
-            _appPrivateKeyId = config.GetSection(ConfigKeys.GitHub.AppPrivateKeyId).Get<string>();
-            _appInstallId = config.GetSection(ConfigKeys.GitHub.AppInstallId).Get<long?>();
-
-            string? pat = config.GetSection(ConfigKeys.GitHub.PAT).Get<string>();
-
-            AuthMode = (!string.IsNullOrEmpty(pat) ? GitHubAuthMode.PAT : GitHubAuthMode.None) | (!string.IsNullOrEmpty(_appId) && !string.IsNullOrEmpty(_appPrivateKeyId) && _appInstallId != null ? GitHubAuthMode.App : GitHubAuthMode.None);
-
-            switch (AuthMode)
+            switch (_authModeSrv.GetAuthMode())
             {
                 case GitHubAuthMode.Hybrid:
                     _logger.LogInformation("GitHub AuthMode: Hybrid - App (Primary) + PAT (Secondary)");
                     _primaryClient = CreateClient();
-                    _coPilotClient = CreateClient(pat!);
+                    _coPilotClient = CreateClient(_authModeSrv.GetPAT()!);
                     break;
                 case GitHubAuthMode.PAT:
                     _logger.LogInformation("GitHub AuthMode: PAT mode");
-                    _primaryClient = CreateClient(pat!);
+                    _primaryClient = CreateClient(_authModeSrv.GetPAT()!);
                     _coPilotClient = _primaryClient;
                     break;
                 case GitHubAuthMode.App:
@@ -76,7 +57,7 @@ namespace Retirebot.Helpers
 
         public async Task<GitHubClient> GetPrimaryClient()
         {
-            if (AuthMode.HasFlag(GitHubAuthMode.App) && DateTimeOffset.UtcNow >= _tokenExpiry)
+            if (_authModeSrv.GetAuthMode().HasFlag(GitHubAuthMode.App) && DateTimeOffset.UtcNow >= _tokenExpiry)
             {
                 await RefreshAppTokenAsync();
             }
@@ -115,7 +96,7 @@ namespace Retirebot.Helpers
                 throw new ArgumentNullException("_keyClient", "When using AuthMode \"App\", a valid connection to a KeyVault has to be present. Please check your configuration.");
             }
 
-            KeyVaultKey key = _keyClient.GetKey(_appPrivateKeyId);
+            KeyVaultKey key = _keyClient.GetKey(_authModeSrv.GetPrivateKeyId());
             if (key.KeyType != KeyType.Rsa && key.KeyType != KeyType.RsaHsm)
             {
                 throw new InvalidOperationException($"GitHub App Private Key must be an RSA based key, got KeyType \"{key.KeyType}\"");
@@ -139,7 +120,7 @@ namespace Retirebot.Helpers
                 {
                     new System.Security.Claims.Claim(JwtRegisteredClaimNames.Iat, now.ToUnixTimeSeconds().ToString()),
                     new System.Security.Claims.Claim(JwtRegisteredClaimNames.Exp, now.AddMinutes(9).ToUnixTimeSeconds().ToString()),
-                    new System.Security.Claims.Claim("iss", _appId!.ToString())
+                    new System.Security.Claims.Claim("iss", _authModeSrv.GetAppId()!.ToString())
                 };
 
             JwtHeader jwtHeader = new JwtHeader(signingCredentials);
@@ -154,14 +135,14 @@ namespace Retirebot.Helpers
                 Credentials = new Credentials(token, AuthenticationType.Bearer)
             };
 
-            var response = intermediate.GitHubApps.CreateInstallationToken(_appInstallId!.Value).Result;
+            var response = intermediate.GitHubApps.CreateInstallationToken(_authModeSrv.GetAppInstallId()!.Value);
             _tokenExpiry = DateTimeOffset.UtcNow.AddMinutes(55); // Install tokens expire every hour, refresh the token 5 minutes early to avoid any weirdness
 
             _logger.LogInformation($"Created new App Client, valid until {_tokenExpiry.ToString()}");
 
             return new GitHubClient(new ProductHeaderValue("Retirebot"))
             {
-                Credentials = new Credentials(response.Token)
+                Credentials = new Credentials(response.Result.Token)
             };
         }
     }
