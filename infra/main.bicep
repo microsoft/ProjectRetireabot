@@ -219,7 +219,7 @@ resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@
   location: location
 }
 
-var subscriptionRoleAssignmentsName = 'sra-${deploymentSuffix}'
+var subscriptionRoleAssignmentsName = 'sra-${deploymentSuffix}-${uniqueString(location)}'
 module subscriptionRoleAssignments 'subscriptionRoleAssignments.bicep' = {
   name: subscriptionRoleAssignmentsName
   scope: subscription()
