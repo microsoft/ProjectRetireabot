@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Retirebot.Helpers;
+using Retirebot.Models;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -40,11 +41,11 @@ builder.Logging.SetMinimumLevel(LogLevel.Information);
 
 DefaultAzureCredential credentials = new DefaultAzureCredential(new DefaultAzureCredentialOptions
 {
-    ManagedIdentityClientId = builder.Configuration.GetSection("AZURE_CLIENT_ID").Get<string>()
+    ManagedIdentityClientId = builder.Configuration.GetSection(ConfigKeys.AzureClientId).Get<string>()
 });
 builder.Services.AddSingleton(credentials);
 
-string? keyvaultUri = builder.Configuration.GetSection("KeyVault:Uri").Get<string>();
+string? keyvaultUri = builder.Configuration.GetSection(ConfigKeys.KeyVault.Uri).Get<string>();
 if (keyvaultUri != null)
 {
     Uri KeyVaultUri = new Uri(keyvaultUri);

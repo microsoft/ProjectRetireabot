@@ -39,20 +39,20 @@ namespace Retirebot.Functions
 
             _ghProvider = credentialProvider;
 
-            _targetRepository = _config.GetSection("GitHub:TargetRepository").Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
-            _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection("Azure:WorkItemScope").Get<string>() ?? "monolithic", true);
+            _targetRepository = _config.GetSection(ConfigKeys.GitHub.TargetRepository).Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
+            _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection(ConfigKeys.Azure.WorkItemScope).Get<string>() ?? "monolithic", true);
 
-            _createParentIssues = config.GetSection("Azure:CreateParentIssues").Get<bool>();
+            _createParentIssues = config.GetSection(ConfigKeys.Azure.CreateParentIssues).Get<bool>();
 
-            string? mappingJson = _config.GetSection("Azure:TargetResourceGroupMapping").Get<string>();
+            string? mappingJson = _config.GetSection(ConfigKeys.Azure.TargetResourceGroupMapping).Get<string>();
             _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
-            _assignGHCP = _config.GetSection("App:AssignGitHubCopilot").Get<bool>();
-            _enableHTTPEndpoint = _config.GetSection("App:EnableHTTPEndpoint").Get<bool>();
+            _assignGHCP = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool>();
+            _enableHTTPEndpoint = _config.GetSection(ConfigKeys.App.EnableHTTPEndpoint).Get<bool>();
 
-            string? rg = _config.GetSection("Azure:TargetResourceGroup").Get<string>();
+            string? rg = _config.GetSection(ConfigKeys.Azure.TargetResourceGroup).Get<string>();
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
         }
 

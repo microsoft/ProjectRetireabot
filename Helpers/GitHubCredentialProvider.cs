@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.KeyVaultExtensions;
 using Microsoft.IdentityModel.Tokens;
 using Octokit;
+using Retirebot.Models;
 using System.IdentityModel.Tokens.Jwt;
 
 namespace Retirebot.Helpers
@@ -43,11 +44,11 @@ namespace Retirebot.Helpers
             _credentials = credentials;
             _logger = loggerFactory.CreateLogger<GitHubCredentialProvider>();
 
-            _appId = config.GetSection("GitHub:AppId").Get<string>();
-            _appPrivateKeyId = config.GetSection("GitHub:AppPrivateKeyId").Get<string>();
-            _appInstallId = config.GetSection("GitHub:AppInstallId").Get<long?>();
+            _appId = config.GetSection(ConfigKeys.GitHub.AppId).Get<string>();
+            _appPrivateKeyId = config.GetSection(ConfigKeys.GitHub.AppPrivateKeyId).Get<string>();
+            _appInstallId = config.GetSection(ConfigKeys.GitHub.AppInstallId).Get<long?>();
 
-            string? pat = config.GetSection("GitHub:PAT").Get<string>();
+            string? pat = config.GetSection(ConfigKeys.GitHub.PAT).Get<string>();
 
             AuthMode = (!string.IsNullOrEmpty(pat) ? GitHubAuthMode.PAT : GitHubAuthMode.None) | (!string.IsNullOrEmpty(_appId) && !string.IsNullOrEmpty(_appPrivateKeyId) && _appInstallId != null ? GitHubAuthMode.App : GitHubAuthMode.None);
 
