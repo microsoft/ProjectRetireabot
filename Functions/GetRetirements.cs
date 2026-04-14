@@ -2,7 +2,6 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Octokit;
 using Retirebot.Helpers;
 using Retirebot.Models;
 using Retirebot.Models.Azure;
@@ -16,7 +15,6 @@ namespace Retirebot.Functions
     {
         private readonly ILogger _logger;
         private readonly Helpers.Azure.ManagementClient _managementClient;
-        private readonly Helpers.GitHub.CredentialProvider _ghProvider;
         private readonly string _advisoryQuery;
 
         private readonly string _targetRepository;
@@ -35,16 +33,14 @@ namespace Retirebot.Functions
 
         private Dictionary<string, string>? _subscriptionToRepoMap;
 
-        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, Helpers.GitHub.CredentialProvider credentialProvider, IWorkItemClient workItemClient)
+        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IWorkItemClient workItemClient)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
             _config = config;
             _workItemClient = workItemClient;
 
-            _ghProvider = credentialProvider;
-
-            _targetRepository = _config.GetSection(ConfigKeys.GitHub.TargetRepository).Get<string>() ?? throw new InvalidOperationException("GitHub:TargetRepository is not configured.");
+            _targetRepository = _config.GetSection(ConfigKeys.App.TargetRepository).Get<string>() ?? throw new InvalidOperationException("App:TargetRepository is not configured.");
             _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection(ConfigKeys.Azure.WorkItemScope).Get<string>() ?? "monolithic", true);
 
             _createParentIssues = config.GetSection(ConfigKeys.Azure.CreateParentIssues).Get<bool>();

@@ -22,7 +22,6 @@
             public const string AppPrivateKeyId = "GitHub:AppPrivateKeyId";
             public const string AppInstallId = "GitHub:AppInstallId";
             public const string PAT = "GitHub:PAT";
-            public const string TargetRepository = "GitHub:TargetRepository";
         }
 
         public static class Azure
@@ -37,6 +36,7 @@
         {
             public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
             public const string EnableHTTPEndpoint = "App:EnableHTTPEndpoint";
+            public const string TargetRepository = "App:TargetRepository";
             public const string WorkItemBackend = "App:WorkItemBackend";
         }
 
