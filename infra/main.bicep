@@ -44,6 +44,9 @@ param targetResourceGroup string
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
 param enableHTTPEndpoint string = 'false'
 
+@description('(Optional) Whether GitHub CoPilot should be assigned to issues created by EverGreen')
+param gitHubCoPilotAssign bool = false
+
 @allowed(['monolithic', 'perResourceGroup'])
 @description('(Optional) Whether issues should be created in one "triage" repository or should be shared across multiple repositories with a parent issue in the repository. Default "monolithic"')
 param workItemScope string = 'monolithic'
@@ -334,6 +337,10 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           {
             name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
             value: applicationInsights.properties.ConnectionString
+          }
+          {
+            name: 'App__AssignGitHubCopilot'
+            value: gitHubCoPilotAssign
           }
           {
             name: 'AZURE_CLIENT_ID'
