@@ -1,8 +1,8 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Retirebot.Models
+namespace Retirebot.Models.Azure
 {
-    public class ARGRetirementData
+    public class RetirementData
     {
         [JsonPropertyName("id")]
         public required string Id { get; set; }

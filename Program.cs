@@ -1,4 +1,3 @@
-using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Keys;
 using Microsoft.Azure.Functions.Worker;
@@ -55,23 +54,23 @@ if (keyvaultUri != null)
 }
 
 builder.Services.AddTransient(sp =>
-    new AzureCredentialTokenHandler(
+    new Retirebot.Helpers.Azure.CredentialTokenHandler(
         sp.GetRequiredService<DefaultAzureCredential>(),
         new[] { "https://management.azure.com/.default" }));
 
-builder.Services.AddHttpClient<ManagementClient>(c =>
+builder.Services.AddHttpClient<Retirebot.Helpers.Azure.ManagementClient>(c =>
 {
     c.BaseAddress = new Uri("https://management.azure.com/");
     c.Timeout = TimeSpan.FromSeconds(60);
 })
-    .AddHttpMessageHandler<AzureCredentialTokenHandler>()
+    .AddHttpMessageHandler<Retirebot.Helpers.Azure.CredentialTokenHandler>()
         .AddPolicyHandler(Policy<HttpResponseMessage>
         .Handle<HttpRequestException>()
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
         .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
 
-builder.Services.AddSingleton<GitHubAuthModeService>();
-builder.Services.AddSingleton<GitHubCredentialProvider>();
+builder.Services.AddSingleton<Retirebot.Helpers.GitHub.AuthModeService>();
+builder.Services.AddSingleton<Retirebot.Helpers.GitHub.CredentialProvider>();
 
 var app = builder.Build();
 

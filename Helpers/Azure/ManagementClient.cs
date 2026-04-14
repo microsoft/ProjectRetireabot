@@ -1,8 +1,8 @@
-﻿using Retirebot.Models;
+﻿using Retirebot.Models.Azure;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace Retirebot.Helpers
+namespace Retirebot.Helpers.Azure
 {
     public class ManagementClient
     {
@@ -27,7 +27,7 @@ namespace Retirebot.Helpers
                 .ToArray();
         }
 
-        public async Task<QueryResult<ARGRetirementData>> RunQueryAsync(string subscriptionId, string query)
+        public async Task<QueryResult<RetirementData>> RunQueryAsync(string subscriptionId, string query)
         {
             string uri = "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01";
 
@@ -40,7 +40,7 @@ namespace Retirebot.Helpers
             var response = await _client.PostAsJsonAsync(uri, requestBody);
             response.EnsureSuccessStatusCode();
 
-            var result = await response.Content.ReadFromJsonAsync<QueryResult<ARGRetirementData>>();
+            var result = await response.Content.ReadFromJsonAsync<QueryResult<RetirementData>>();
 
             if (result == null) {
                 throw new InvalidOperationException("Got a null object when attempting to deserialise Azure Resource Graph Query response.");

@@ -1,7 +1,7 @@
-﻿namespace Retirebot.Models
+﻿namespace Retirebot.Models.GitHub
 {
     [Flags]
-    public enum GitHubAuthMode
+    public enum AuthMode
     {
         None = 0,
         PAT = 1 << 0,

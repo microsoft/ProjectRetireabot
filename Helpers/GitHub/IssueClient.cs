@@ -1,11 +1,12 @@
 ﻿using Microsoft.Extensions.Logging;
 using Octokit;
-using Retirebot.Models;
+using Retirebot.Helpers.GitHub;
+using Retirebot.Models.Azure;
 using System.Text.RegularExpressions;
 
 namespace Retirebot.Helpers
 {
-    public partial class GitHubHelper
+    public partial class IssueClient
     {
         private const int MaxLabelLength = 50;
         private const string AdvisoryLabelPrefix = "advisor-";
@@ -65,7 +66,7 @@ namespace Retirebot.Helpers
             return existingIssues;
         }
 
-        public async static Task<List<(Advisory, Issue)>> CreateIssuesBatch(ILogger logger, GitHubCredentialProvider ghProvider, List<Advisory> advisories, string targetRepo, bool assignGHCP)
+        public async static Task<List<(Advisory, Issue)>> CreateIssuesBatch(ILogger logger, CredentialProvider ghProvider, List<Advisory> advisories, string targetRepo, bool assignGHCP)
         {
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
             

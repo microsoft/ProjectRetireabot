@@ -1,7 +1,6 @@
-
 using System.Text.Json.Serialization;
 
-namespace Retirebot.Models
+namespace Retirebot.Models.Azure
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AzureContainerType

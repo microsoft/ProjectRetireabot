@@ -7,12 +7,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.KeyVaultExtensions;
 using Microsoft.IdentityModel.Tokens;
 using Octokit;
-using Retirebot.Models;
+using Retirebot.Models.GitHub;
 using System.IdentityModel.Tokens.Jwt;
 
-namespace Retirebot.Helpers
+namespace Retirebot.Helpers.GitHub
 {
-    public class GitHubCredentialProvider
+    public class CredentialProvider
     {
         private GitHubClient _primaryClient;
         private GitHubClient? _coPilotClient;
@@ -24,32 +24,32 @@ namespace Retirebot.Helpers
         private DateTimeOffset _tokenExpiry = DateTimeOffset.MinValue;
         private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
-        private readonly GitHubAuthModeService _authModeSrv;
+        private readonly AuthModeService _authModeSrv;
 
-        public GitHubCredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, DefaultAzureCredential credentials, GitHubAuthModeService authModeService, KeyClient? keyClient)
+        public CredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, DefaultAzureCredential credentials, AuthModeService authModeService, KeyClient? keyClient)
         {
             _authModeSrv = authModeService;
             _keyClient = keyClient;
             _credentials = credentials;
-            _logger = loggerFactory.CreateLogger<GitHubCredentialProvider>();
+            _logger = loggerFactory.CreateLogger<CredentialProvider>();
 
             switch (_authModeSrv.GetAuthMode())
             {
-                case GitHubAuthMode.Hybrid:
+                case AuthMode.Hybrid:
                     _logger.LogInformation("GitHub AuthMode: Hybrid - App (Primary) + PAT (Secondary)");
                     _primaryClient = CreateClient();
                     _coPilotClient = CreateClient(_authModeSrv.GetPAT()!);
                     break;
-                case GitHubAuthMode.PAT:
+                case AuthMode.PAT:
                     _logger.LogInformation("GitHub AuthMode: PAT mode");
                     _primaryClient = CreateClient(_authModeSrv.GetPAT()!);
                     _coPilotClient = _primaryClient;
                     break;
-                case GitHubAuthMode.App:
+                case AuthMode.App:
                     _logger.LogInformation("GitHub AuthMode: App mode");
                     _primaryClient = CreateClient();
                     break;
-                case GitHubAuthMode.None:
+                case AuthMode.None:
                 default:
                     throw new InvalidOperationException("No supported GitHub credentials are available. Provide GitHub:PAT and/or GitHub:AppId");
             }
@@ -57,7 +57,7 @@ namespace Retirebot.Helpers
 
         public async Task<GitHubClient> GetPrimaryClient()
         {
-            if (_authModeSrv.GetAuthMode().HasFlag(GitHubAuthMode.App) && DateTimeOffset.UtcNow >= _tokenExpiry)
+            if (_authModeSrv.GetAuthMode().HasFlag(AuthMode.App) && DateTimeOffset.UtcNow >= _tokenExpiry)
             {
                 await RefreshAppTokenAsync();
             }

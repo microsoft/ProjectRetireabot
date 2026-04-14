@@ -1,14 +1,14 @@
 using Azure.Core;
 using System.Net.Http.Headers;
 
-namespace Retirebot.Helpers
+namespace Retirebot.Helpers.Azure
 {
-    public class AzureCredentialTokenHandler : DelegatingHandler
+    public class CredentialTokenHandler : DelegatingHandler
     {
         private readonly TokenCredential _credential;
         private readonly string[] _scopes;
 
-        public AzureCredentialTokenHandler(TokenCredential credential, string[] scopes)
+        public CredentialTokenHandler(TokenCredential credential, string[] scopes)
         {
             _credential = credential;
             _scopes = scopes;
