@@ -69,10 +69,21 @@ builder.Services.AddHttpClient<Retirebot.Helpers.Azure.ManagementClient>(c =>
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
         .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
 
-builder.Services.AddSingleton<Retirebot.Helpers.GitHub.AuthModeService>();
-builder.Services.AddSingleton<Retirebot.Helpers.GitHub.CredentialProvider>();
+WorkItemBackend backend = Enum.Parse<WorkItemBackend>(builder.Configuration.GetSection(ConfigKeys.App.WorkItemBackend).Get<string>() ?? "GitHub", true);
 
-builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.GitHub.WorkItemClient>();
+switch (backend)
+{
+    case WorkItemBackend.GitHub:
+        builder.Services.AddSingleton<Retirebot.Helpers.GitHub.AuthModeService>();
+        builder.Services.AddSingleton<Retirebot.Helpers.GitHub.CredentialProvider>();
+        builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.GitHub.WorkItemClient>();
+        break;
+    case WorkItemBackend.AzureDevOps:
+        throw new NotImplementedException("Azure DevOps Tracking backend has not yet been implemented.");
+    default:
+        throw new InvalidOperationException($"Unsupported work item backend: {backend}");
+
+}
 
 var app = builder.Build();
 

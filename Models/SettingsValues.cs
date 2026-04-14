@@ -6,6 +6,12 @@
         PerResourceGroup
     }
 
+    public enum WorkItemBackend
+    {
+        AzureDevOps,
+        GitHub
+    }
+
     public static class ConfigKeys
     {
         public const string AzureClientId = "AZURE_CLIENT_ID";
@@ -31,6 +37,7 @@
         {
             public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
             public const string EnableHTTPEndpoint = "App:EnableHTTPEndpoint";
+            public const string WorkItemBackend = "App:WorkItemBackend";
         }
 
         public static class KeyVault
