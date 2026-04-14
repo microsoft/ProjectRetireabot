@@ -65,5 +65,22 @@ namespace Retirebot.Helpers
 
             return result;
         }
+
+        public async Task<Dictionary<string,string>> GetManagementGroupSubscriptionsAsync(string groupId)
+        {
+            var response = await _client.GetAsync($"/providers/Microsoft.Management/managementGroups/{groupId}/descendants?api-version=2020-05-01");
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<ManagementGroupDescendantsResponse>();
+
+            if (result == null)
+            {
+                throw new InvalidOperationException($"Got a null object when attempting to deserialise Management Group descendants for {groupId}.");
+            }
+
+            return result.Value
+                .Where(d => d.IsSubscription)
+                .ToDictionary(d => d.Name, d=> groupId);
+        }
     }
 }

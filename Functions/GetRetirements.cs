@@ -31,6 +31,8 @@ namespace Retirebot.Functions
 
         private readonly IConfiguration _config;
 
+        private Dictionary<string, string>? _subscriptionToRepoMap;
+
         public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, ManagementClient client, GitHubCredentialProvider credentialProvider)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
@@ -92,6 +94,35 @@ namespace Retirebot.Functions
             }
         }
 
+        private async Task<Dictionary<string, string>> BuildSubscriptionToRepoMapASync()
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var mgMappings = _rgRepoMapping
+            .Where(m => m.Type == AzureContainerType.ManagementGroup)
+            .ToList();
+
+            for (int i = 0; i < mgMappings.Count; i++)
+            {
+                var mapping = mgMappings[i];
+
+                try
+                {
+                    var subscriptions = await _managementClient.GetManagementGroupSubscriptionsAsync(mapping.Name);
+                    foreach (var (subId, mgId) in subscriptions)
+                    {
+                        map.TryAdd(subId, mgId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to resolve subscriptions for management group {GroupId}", mapping.Name);
+                }
+            }
+
+            return map;
+        }
+
         private string GetRepositoryForAdvisory(Advisory advisory)
         {
             if (_workItemScope != WorkItemScope.PerResourceGroup)
@@ -103,7 +134,8 @@ namespace Retirebot.Functions
             {
                 AzureContainerType.Subscription => string.Equals(m.Name, advisory.GetSubscriptionId(), StringComparison.OrdinalIgnoreCase),
                 AzureContainerType.ResourceGroup => string.Equals(m.Name, advisory.GetResourceGroupName(), StringComparison.OrdinalIgnoreCase),
-                _ => false,
+                AzureContainerType.ManagementGroup => _subscriptionToRepoMap != null && _subscriptionToRepoMap.TryGetValue(advisory.GetSubscriptionId(), out string? mgId) && string.Equals(mgId, m.Name, StringComparison.OrdinalIgnoreCase),
+                _ => false
             });
 
             return mapping?.Repository ?? _targetRepository;
@@ -113,6 +145,12 @@ namespace Retirebot.Functions
         {
             Stopwatch sw = Stopwatch.StartNew();
             _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
+
+            if (_rgRepoMapping.Any(m => m.Type == AzureContainerType.ManagementGroup))
+            {
+                _subscriptionToRepoMap = await BuildSubscriptionToRepoMapASync();
+                _logger.LogInformation("Resolved {Count} subscriptions from management group mappings", _subscriptionToRepoMap.Count);
+            }
 
             string[] subs = await _managementClient.GetSubscriptionsAsync();
             if (subs is null || subs.Length == 0)
