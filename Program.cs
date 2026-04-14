@@ -72,6 +72,8 @@ builder.Services.AddHttpClient<Retirebot.Helpers.Azure.ManagementClient>(c =>
 builder.Services.AddSingleton<Retirebot.Helpers.GitHub.AuthModeService>();
 builder.Services.AddSingleton<Retirebot.Helpers.GitHub.CredentialProvider>();
 
+builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.GitHub.WorkItemClient>();
+
 var app = builder.Build();
 
 PreflightChecks.StartPreflightChecks(builder, app);

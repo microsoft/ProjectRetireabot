@@ -1,19 +1,44 @@
 ﻿using Microsoft.Extensions.Logging;
 using Octokit;
+using Retirebot.Models;
 using Retirebot.Models.Azure;
 using System.Text.RegularExpressions;
 
 namespace Retirebot.Helpers.GitHub
 {
-    public partial class IssueClient
+    public partial class WorkItemClient : IWorkItemClient
     {
         private const int MaxLabelLength = 50;
         private const string AdvisoryLabelPrefix = "advisor-";
         private const string ParentLabelPrefix = "advisor-type-";
 
-        public async static Task<Dictionary<string, Issue>> FindExistingIssuesByLabelsAsync(ILogger logger, GitHubClient ghClient, List<Advisory> advisories, string targetRepo)
+        private readonly CredentialProvider _credentialProvider;
+        private readonly ILogger _logger;
+
+        public WorkItemClient(ILoggerFactory loggerFactory, CredentialProvider credentialProvider)
         {
-            Dictionary<string, Issue> existingIssues = new Dictionary<string, Issue>();
+            _logger = loggerFactory.CreateLogger<WorkItemClient>();
+            _credentialProvider = credentialProvider;
+        }
+
+        private static WorkItem ToWorkItem(Issue issue)
+        {
+            return new WorkItem()
+            {
+                Id = issue.Id.ToString(),
+                Number = issue.Number,
+                Title = issue.Title,
+                Body = issue.Body,
+                State = issue.State == ItemState.Open ? WorkItemState.Open : WorkItemState.Closed,
+                Labels = issue.Labels?.Select(l => l.Name).ToList() ?? [],
+                Assignees = issue.Assignees?.Select(a => a.Login).ToList() ?? [],
+                Url = issue.HtmlUrl
+            };
+        }
+
+        public async Task<Dictionary<string, WorkItem>> FindExistingByAdvisoryAsync(List<Advisory> advisories, string targetRepo)
+        {
+            Dictionary<string, WorkItem> existingIssues = new Dictionary<string, WorkItem>();
             const int batchSize = 5;
 
             for (int i = 0; i < advisories.Count; i += batchSize)
@@ -33,7 +58,7 @@ namespace Retirebot.Helpers.GitHub
 
                 try
                 {
-                    var results = await ghClient.Search.SearchIssues(searchRequest);
+                    var results = await (await _credentialProvider.GetPrimaryClient()).Search.SearchIssues(searchRequest);
 
                     for (int j = 0; j < results.Items.Count; j++)
                     {
@@ -46,14 +71,14 @@ namespace Retirebot.Helpers.GitHub
                             var matchedAdvisory = batch.FirstOrDefault(a => GetAdvisoryLabel(a.Name) == advisoryLabel.Name);
                             if (matchedAdvisory != null)
                             {
-                                existingIssues[matchedAdvisory.Name] = issue;
+                                existingIssues[matchedAdvisory.Name] = ToWorkItem(issue);
                             }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to search for exisiting issues in batch.");
+                    _logger.LogError(ex, "Failed to search for existing issues in batch.");
                 }
 
                 // Respect GitHub search rate limits (30 requests/minute)
@@ -65,17 +90,17 @@ namespace Retirebot.Helpers.GitHub
             return existingIssues;
         }
 
-        public async static Task<List<(Advisory, Issue)>> CreateIssuesBatch(ILogger logger, CredentialProvider ghProvider, List<Advisory> advisories, string targetRepo, bool assignGHCP)
+        public async Task<List<(Advisory, WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot)
         {
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
-            
-            GitHubClient? ghClient = ghProvider.GetCopilotCapableClient();
+
+            GitHubClient? ghClient = _credentialProvider.GetCopilotCapableClient();
             if (ghClient == null)
             {
-                ghClient = await ghProvider.GetPrimaryClient();
-                logger.LogWarning("Attempting to use a non-CoPilot capable client, issue creation may fail");
+                ghClient = await _credentialProvider.GetPrimaryClient();
+                _logger.LogWarning("Attempting to use a non-CoPilot capable client, issue creation may fail");
             }
-            
+
             var created = advisories.Select(async advisory =>
             {
                 await semaphore.WaitAsync();
@@ -92,19 +117,19 @@ namespace Retirebot.Helpers.GitHub
                     newIssue.Labels.Add("azure-advisor");
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
-                    if (assignGHCP) newIssue.Assignees.Add("copilot-swe-agent[bot]");
+                    if (assignCopilot) newIssue.Assignees.Add("copilot-swe-agent[bot]");
 
                     string[] repoParts = targetRepo.Split("/");
 
                     var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
-                    logger.LogInformation("Created issue #{Number} for advisory {AdvisoryId}",
+                    _logger.LogInformation("Created issue #{Number} for advisory {AdvisoryId}",
                         created.Number, advisory.Name);
 
                     return created;
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", advisory.Name);
+                    _logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", advisory.Name);
                     return null;
                 }
                 finally
@@ -117,11 +142,11 @@ namespace Retirebot.Helpers.GitHub
 
             if (results == null)
             {
-                return new List<(Advisory, Issue)>();
+                return new List<(Advisory, WorkItem)>();
             }
             return [.. results.Select((r, i) => (advisory: advisories[i], issue: r))
                   .Where(p => p.issue != null)
-                  .Select(p => (p.advisory, p.issue!))];
+                  .Select(p => (p.advisory, ToWorkItem(p.issue!)))];
         }
 
         private static string GetAdvisoryLabel(string advisoryName)
@@ -208,14 +233,14 @@ namespace Retirebot.Helpers.GitHub
         /// Builds the full cross-repo issue reference (e.g., "owner/repo#42").
         /// If the child is in the same repo as the parent, uses short form "#42".
         /// </summary>
-        private static string GetIssueReference(Issue childIssue, string childRepo, string parentRepo)
+        private static string GetIssueReference(WorkItem childIssue, string childRepo, string parentRepo)
         {
             return string.Equals(childRepo, parentRepo, StringComparison.OrdinalIgnoreCase)
                 ? $"#{childIssue.Number}"
                 : $"{childRepo}#{childIssue.Number}";
         }
 
-        private static string GenerateParentIssueBody(Advisory representativeAdvisory, Dictionary<string, List<Issue>> childIssuesByRepo, string parentRepo)
+        private static string GenerateParentIssueBody(Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childIssuesByRepo, string parentRepo)
         {
             var props = representativeAdvisory.Properties;
             var taskListLines = childIssuesByRepo
@@ -255,11 +280,12 @@ namespace Retirebot.Helpers.GitHub
 ";
         }
 
-        public static async Task<Issue?> FindOrCreateParentIssueAsync(ILogger logger, GitHubClient ghClient, string recommendationTypeId, Advisory recommendationInfo, Dictionary<string, List<Issue>> childIssuesByRepo, string parentRepo)
+        public async Task<WorkItem?> FindOrCreateParentAsync(string recommendationTypeId, Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childItemsByRepo, string parentRepo)
         {
             string parentLabel = GetParentLabel(recommendationTypeId);
             string[] repoParts = parentRepo.Split("/");
             Issue? existingParent = null;
+            GitHubClient? ghClient = await _credentialProvider.GetPrimaryClient();
 
             SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:{parentLabel}")
             {
@@ -279,20 +305,20 @@ namespace Retirebot.Helpers.GitHub
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to search for existing parent issue.");
+                _logger.LogError(ex, "Failed to search for existing parent issue.");
             }
 
             if (existingParent != null)
             {
                 (HashSet<string> existingRefs, _, _) = ParseTaskListReferences(existingParent.Body);
 
-                List<string> allRefs = childIssuesByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
+                List<string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
                 List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
 
                 if (newRefs.Count == 0)
                 {
-                    logger.LogInformation("Parent issue #{Number} for recommendation {TypeId} is already up to date", existingParent.Number, recommendationTypeId);
-                    return existingParent;
+                    _logger.LogInformation("Parent issue #{Number} for recommendation {TypeId} is already up to date", existingParent.Number, recommendationTypeId);
+                    return ToWorkItem(existingParent);
                 }
 
                 var existingTaskLines = TaskListPattern().Matches(existingParent.Body).Select(m => m.Value.Trim());
@@ -311,40 +337,40 @@ namespace Retirebot.Helpers.GitHub
                 if (existingParent.State == ItemState.Closed)
                 {
                     update.State = ItemState.Open;
-                    logger.LogInformation("Reopening parent issue #{Number} — new affected resources found", existingParent.Number);
+                    _logger.LogInformation("Reopening parent issue #{Number} — new affected resources found", existingParent.Number);
                 }
 
                 Issue updated = await ghClient.Issue.Update(repoParts[0], repoParts[1], existingParent.Number, update);
-                logger.LogInformation("Updated parent issue #{Number} with {Count} new child references for recommendation {TypeId}",
+                _logger.LogInformation("Updated parent issue #{Number} with {Count} new child references for recommendation {TypeId}",
                     updated.Number, newRefs.Count, recommendationTypeId);
 
-                return updated;
+                return ToWorkItem(updated);
             }
 
-            logger.LogInformation("Cannot find existing parent, creating new parent issue for {RecommendationTypeId}...", recommendationTypeId);
+            _logger.LogInformation("Cannot find existing parent, creating new parent issue for {RecommendationTypeId}...", recommendationTypeId);
 
             try
             {
-                NewIssue newIssue = new NewIssue($"Retirement Tracking: {recommendationInfo.Properties.ShortDescription.Problem}")
+                NewIssue newIssue = new NewIssue($"Retirement Tracking: {representativeAdvisory.Properties.ShortDescription.Problem}")
                 {
-                    Body = GenerateParentIssueBody(recommendationInfo, childIssuesByRepo, parentRepo)
+                    Body = GenerateParentIssueBody(representativeAdvisory, childItemsByRepo, parentRepo)
                 };
 
                 // Add labels including the advisory GUID
                 newIssue.Labels.Add(parentLabel);
                 newIssue.Labels.Add("azure-advisor");
                 newIssue.Labels.Add("tracking");
-                newIssue.Labels.Add(recommendationInfo.Properties.Impact.ToLower());
+                newIssue.Labels.Add(representativeAdvisory.Properties.Impact.ToLower());
 
                 var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
-                logger.LogInformation("Created parent issue #{Number} for recommendation {TypeId} with {Count} child issues",
-                    created.Number, recommendationTypeId, childIssuesByRepo.Values.Sum(i => i.Count));
+                _logger.LogInformation("Created parent issue #{Number} for recommendation {TypeId} with {Count} child issues",
+                    created.Number, recommendationTypeId, childItemsByRepo.Values.Sum(i => i.Count));
 
-                return created;
+                return ToWorkItem(created);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", recommendationInfo.Name);
+                _logger.LogError(ex, "Failed to create issue for advisory {AdvisoryId}", representativeAdvisory.Name);
             }
             return null;
         }
