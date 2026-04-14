@@ -99,11 +99,12 @@ namespace Retirebot.Functions
                 return _targetRepository;
             }
 
-            string resourceGroup = advisory.GetResourceGroupName();
-
-            var mapping = _rgRepoMapping.FirstOrDefault(m =>
-                m.Type == AzureContainerType.ResourceGroup
-                && string.Equals(m.Name, resourceGroup, StringComparison.OrdinalIgnoreCase));
+            AzureRepositoryMap? mapping = _rgRepoMapping.FirstOrDefault(m => m.Type switch
+            {
+                AzureContainerType.Subscription => string.Equals(m.Name, advisory.GetSubscriptionId(), StringComparison.OrdinalIgnoreCase),
+                AzureContainerType.ResourceGroup => string.Equals(m.Name, advisory.GetResourceGroupName(), StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            });
 
             return mapping?.Repository ?? _targetRepository;
         }

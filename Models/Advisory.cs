@@ -14,15 +14,12 @@ namespace Retirebot.Models
         [JsonPropertyName("properties")]
         public AdvisoryProperties Properties { get; set; } = new();
 
-        public string GetResourceGroupName()
-        {
-            return Id.Split('/')[4];
-        }
+        private string[]? _idSegments;
+        private string[] IdSegments => _idSegments ??= Id.Split('/');
 
-        public string GetResourceName()
-        {
-            return Properties.ImpactedValue.ToString();
-        }
+        public string GetSubscriptionId() => IdSegments[2];
+        public string GetResourceGroupName() => IdSegments[4];
+        public string GetResourceName() => Properties.ImpactedValue;
     }
 
     public class AdvisoryProperties
