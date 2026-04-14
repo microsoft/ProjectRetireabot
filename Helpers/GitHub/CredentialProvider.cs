@@ -138,7 +138,7 @@ namespace Retirebot.Helpers.GitHub
             var response = intermediate.GitHubApps.CreateInstallationToken(_authModeSrv.GetAppInstallId()!.Value);
             _tokenExpiry = DateTimeOffset.UtcNow.AddMinutes(55); // Install tokens expire every hour, refresh the token 5 minutes early to avoid any weirdness
 
-            _logger.LogInformation($"Created new App Client, valid until {_tokenExpiry.ToString()}");
+            _logger.LogInformation("Created new App Client, valid until {Expiry}", _tokenExpiry);
 
             return new GitHubClient(new ProductHeaderValue("Retirebot"))
             {

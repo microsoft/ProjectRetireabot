@@ -1,10 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
 using Octokit;
-using Retirebot.Helpers.GitHub;
 using Retirebot.Models.Azure;
 using System.Text.RegularExpressions;
 
-namespace Retirebot.Helpers
+namespace Retirebot.Helpers.GitHub
 {
     public partial class IssueClient
     {
@@ -322,7 +321,7 @@ namespace Retirebot.Helpers
                 return updated;
             }
 
-            logger.LogInformation($"Cannot find existing parent, creating new parent issue for {recommendationTypeId}...");
+            logger.LogInformation("Cannot find existing parent, creating new parent issue for {RecommendationTypeId}...", recommendationTypeId);
 
             try
             {

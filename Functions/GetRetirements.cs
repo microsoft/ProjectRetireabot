@@ -3,7 +3,6 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Octokit;
-using Retirebot.Helpers;
 using Retirebot.Models;
 using Retirebot.Models.Azure;
 using System.Diagnostics;
@@ -184,13 +183,13 @@ namespace Retirebot.Functions
             {
                 _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
 
-                Dictionary<string, Issue> existingIssues = await IssueClient.FindExistingIssuesByLabelsAsync(_logger, await _ghProvider.GetPrimaryClient(), repoAdvisories, repo);
+                Dictionary<string, Issue> existingIssues = await Helpers.GitHub.IssueClient.FindExistingIssuesByLabelsAsync(_logger, await _ghProvider.GetPrimaryClient(), repoAdvisories, repo);
                 List<Advisory> advisoriesToCreate = repoAdvisories.Where(a => !existingIssues.ContainsKey(a.Name)).ToList();
 
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
                     existingIssues.Count, advisoriesToCreate.Count, repo);
 
-                List<(Advisory, Issue)> createdIssues = await IssueClient.CreateIssuesBatch(_logger, _ghProvider, advisoriesToCreate, repo, _assignGHCP);
+                List<(Advisory, Issue)> createdIssues = await Helpers.GitHub.IssueClient.CreateIssuesBatch(_logger, _ghProvider, advisoriesToCreate, repo, _assignGHCP);
 
                 if (_createParentIssues)
                 {
@@ -225,7 +224,7 @@ namespace Retirebot.Functions
             {
                 foreach (var (typeId, childIssuesByRepo) in childIssuesByType)
                 {
-                    await IssueClient.FindOrCreateParentIssueAsync(
+                    await Helpers.GitHub.IssueClient.FindOrCreateParentIssueAsync(
                         _logger,
                         await _ghProvider.GetPrimaryClient(),
                         typeId,

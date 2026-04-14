@@ -11,7 +11,7 @@ namespace Retirebot.Helpers.GitHub
         private readonly string? _pat;
         private readonly long? _appInstallId;
 
-        private AuthMode AuthMode;
+        private readonly AuthMode AuthMode;
 
         public AuthModeService(IConfiguration config)
         {
