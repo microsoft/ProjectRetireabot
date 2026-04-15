@@ -31,6 +31,9 @@ namespace Retirebot.Functions
         private readonly IConfiguration _config;
         private readonly IWorkItemClient _workItemClient;
 
+        private readonly bool _useTriageRepoForUnmapped;
+        private readonly string _unmappedRepository;
+
         private Dictionary<string, string>? _subscriptionToRepoMap;
 
         public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IWorkItemClient workItemClient)
@@ -42,6 +45,9 @@ namespace Retirebot.Functions
 
             _targetRepository = _config.GetSection(ConfigKeys.App.TargetRepository).Get<string>() ?? throw new InvalidOperationException("App:TargetRepository is not configured.");
             _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection(ConfigKeys.Azure.WorkItemScope).Get<string>() ?? "monolithic", true);
+
+            _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool>();
+            _unmappedRepository = config.GetSection(ConfigKeys.App.UnmappedRepository).Get<string>() ?? string.Empty;
 
             _createParentIssues = config.GetSection(ConfigKeys.Azure.CreateParentIssues).Get<bool>();
 
@@ -137,7 +143,7 @@ namespace Retirebot.Functions
                 _ => false
             });
 
-            return mapping?.Repository ?? _targetRepository;
+            return mapping?.Repository ?? ((!_useTriageRepoForUnmapped && _unmappedRepository != string.Empty) ? _unmappedRepository : _targetRepository);
         }
 
         public async Task GetRetirementsASync()

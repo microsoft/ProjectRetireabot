@@ -42,6 +42,8 @@
             public const string ParentLabelPrefix = "App:ParentLabelPrefix";
             public const string TargetRepository = "App:TargetRepository";
             public const string WorkItemBackend = "App:WorkItemBackend";
+            public const string UseTriageRepoForUnmapped = "App:UseTriageRepoForUnmapped";
+            public const string UnmappedRepository = "App:UnmappedRepository";
         }
 
         public static class KeyVault
