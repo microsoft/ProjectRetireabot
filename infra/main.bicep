@@ -18,6 +18,13 @@ param deploymentUniqueText string = take(uniqueString(subscription().id, resourc
 @metadata({ azd: { type: 'location' } })
 param location string
 
+@allowed([
+  'GitHub'
+  'AzureDevOps'
+])
+@description('What Work Item backend EverGreen should use to create issues against')
+param workItemBackend string = 'GitHub'
+
 @secure()
 @description('The PAT that allows EverGreen to interact with your GitHub repository.')
 param gitHubPAT string
@@ -71,7 +78,7 @@ var deploymentSuffix = toLower(trim(replace(
   ''
 )))
 
-var gitHubCredentialValidation = empty(gitHubPAT) && empty(gitHubAppId) && empty(gitHubInstallId) && empty(gitHubPrivateKeyId)
+var gitHubCredentialValidation = empty(gitHubPAT) && empty(gitHubAppId) && empty(gitHubInstallId) && empty(gitHubPrivateKeyId) && workItemBackend == 'GitHub'
   ? fail('You must provide at least one way of authenticating with GitHub (PAT or App)')
   : null
 
@@ -83,7 +90,7 @@ var gitHubAppParamsPopulated = [
 ]
 
 var gitHubParamCount = reduce(gitHubAppParamsPopulated, 0, (cur, next) => cur + next)
-var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4)
+var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4) && workItemBackend == 'GitHub'
   ? fail('To use GitHub App authentication, you need to populate all required fields')
   : null
 
@@ -108,7 +115,7 @@ resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
   }
 }
 
-resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (gitHubCredentialValidation != null && !empty(gitHubPAT)) {
+resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (gitHubCredentialValidation != null && !empty(gitHubPAT) && workItemBackend == 'GitHub') {
   parent: vault
   name: 'GithubPAT'
   properties: {
@@ -343,6 +350,22 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: gitHubCoPilotAssign
           }
           {
+            name: 'App__EnableHTTPEndpoint'
+            value: enableHTTPEndpoint
+          }
+          {
+            name: 'App__TargetRepository'
+            value: targetRepository
+          }
+          {
+            name: 'App__WorkItemBackend'
+            value: workItemBackend
+          }
+          {
+            name: 'Azure__WorkItemScope'
+            value: workItemScope
+          }
+          {
             name: 'AZURE_CLIENT_ID'
             value: userAssignedIdentity.properties.clientId
           }
@@ -359,10 +382,6 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: 'managedidentity'
           }
           {
-            name: 'ENABLE_HTTP_ENDPOINT'
-            value: enableHTTPEndpoint
-          }
-          {
             name: 'FUNCTIONS_EXTENSION_VERSION'
             value: '~4'
           }
@@ -373,14 +392,6 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           {
             name: 'KeyVault__Uri'
             value: vault.properties.vaultUri
-          }
-          {
-            name: 'TARGET_REPOSITORY'
-            value: targetRepository
-          }
-          {
-            name: 'WORKITEM_SCOPE'
-            value: workItemScope
           }
           {
             name: 'WEBSITE_ENABLE_SYNC_UPDATE_SITE'
@@ -395,7 +406,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: '1'
           }
         ],
-        gitHubParamCountValidation == null || gitHubParamCount != 4
+        gitHubParamCountValidation == null || gitHubParamCount != 4 || workItemBackend != 'GitHub'
           ? []
           : [
               {
@@ -414,12 +425,12 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
         empty(targetResourceGroup)
           ? []
           : [
-              { name: 'TARGET_RESOURCE_GROUP', value: targetResourceGroup }
+              { name: 'App__TargetResourceGroup', value: targetResourceGroup }
             ],
         workItemScope == 'monolithic'
           ? []
           : [
-              { name: 'TARGET_RESOURCE_GROUP_MAPPING', value: resourceGroupRepositoryMap }
+              { name: 'App__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }
             ]
       )
     }
@@ -430,6 +441,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
   }
 }
 
+output WORK_ITEM_BACKEND string = workItemBackend
 output GITHUB_PRIVATE_KEY_ID string = gitHubParamCount == 4 ? gitHubPrivateKeyId : ''
 output GITHUB_PRIVATE_KEY_PATH string = gitHubParamCount == 4 ? gitHubPrivateKeyPath : ''
 output AZURE_KEY_VAULT_NAME string = vault.name

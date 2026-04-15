@@ -1,3 +1,8 @@
+if (![string]::Equals($env:WORK_ITEM_BACKEND, "GitHub")) {
+    Write-Host "No post-provision actions for " $env:WORK_ITEM_BACKEND
+    exit 0
+}
+
 if ([string]::IsNullOrEmpty($env:GITHUB_PRIVATE_KEY_ID) || [string]::IsNullOrEmpty($env:GITHUB_PRIVATE_KEY_PATH)) {
     Write-Host "GitHub App auth not configured, skipping key upload."
     exit 0
