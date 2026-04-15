@@ -2,17 +2,17 @@
 
 This is the repository contains the source code to Evergreen, an under-development proof-of-concept to help customers be on top of their resource migrations of EoL Azure services and or SKUs.
 
-## How it works
+## How it works (with GitHub)
 
 1. Retrieves all Azure Advisor advisories for your deployed resources in the subscriptions it has access to
 2. Fetches the full advisory and extracts the key information from it
-3. Checks if the advisory already has an issue, if not creates it as an issue on a specified GitHub repository and assign GitHub CoPilot to the issue
+3. Checks if the advisory already has an issue, if not creates it as an issue on a specified repository and assign GitHub CoPilot to the issue
 4. GitHub CoPilot attempts to resolve the issue and create a PR to review
 
 ## Requirements
 
 - Azure Subscription(s)
-- GitHub CoPilot Licenses (if Assigning feature)
+- GitHub CoPilot Licenses (if assigning feature is enabled)
 
 ## Usage
 
