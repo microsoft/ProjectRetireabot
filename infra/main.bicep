@@ -22,7 +22,7 @@ param location string
   'GitHub'
   'AzureDevOps'
 ])
-@description('What Work Item backend EverGreen should use to create issues against')
+@description('What work item backend EverGreen should use to create work items in')
 param workItemBackend string = 'GitHub'
 
 @secure()
@@ -47,9 +47,29 @@ param targetRepository string
 @description('(Optional) The resource group EverGreen should create issues for, leave blank any resource group')
 param targetResourceGroup string
 
-@allowed(['true', 'false'])
+@description('(Optional) What label should be attached to all work items to identify it was created by EverGreen. Default: advisor')
+param advisoryLabel string
+
+@description('(Optional) What label should be attached to parent work items to identify them. Default: tracking')
+param advisoryParentLabel string
+
+@description('(Optional) What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-')
+param advisoryLabelPrefix string
+
+@description('(Optional) What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-')
+param parentLabelPrefix string
+
+@description('(Optional) Whether child work items should be created when processing advisories')
+param createChildWorkItems bool = true
+
+@description('(Optional) Should unmapped resources have their work items created in the triage repository/target repository in perResourceGroup mode. Default: true')
+param useTriageRepoForUnmapped bool = true
+
+@description('(Optional) The repository work items should be created in when they are not mapped in perResourceGroup mode.')
+param unmappedRepository string
+
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
-param enableHTTPEndpoint string = 'false'
+param enableHTTPEndpoint bool = false
 
 @description('(Optional) Whether GitHub CoPilot should be assigned to issues created by EverGreen')
 param gitHubCoPilotAssign bool = false
@@ -93,6 +113,9 @@ var gitHubParamCount = reduce(gitHubAppParamsPopulated, 0, (cur, next) => cur + 
 var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4) && workItemBackend == 'GitHub'
   ? fail('To use GitHub App authentication, you need to populate all required fields')
   : null
+
+// temporary
+var gitHubOnly = workItemBackend != 'GitHub' ? fail('Only GitHub WorkItem Backend is supported currently') : null
 
 var keyVaultResourceName = 'kv-${deploymentSuffix}'
 resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
@@ -350,12 +373,40 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: gitHubCoPilotAssign
           }
           {
+            name: 'App__AdvisoryLabel'
+            value: advisoryLabel
+          }
+          {
+            name: 'App__AdvisoryParentLabel'
+            value: advisoryParentLabel
+          }
+          {
+            name: 'App__AdvisoryLabelPrefix'
+            value: advisoryLabelPrefix
+          }
+          {
+            name: 'App__ParentLabelPrefix'
+            value: parentLabelPrefix
+          }
+          {
+            name: 'App__CreateChildWorkItems'
+            value: createChildWorkItems
+          }
+          {
             name: 'App__EnableHTTPEndpoint'
             value: enableHTTPEndpoint
           }
           {
             name: 'App__TargetRepository'
             value: targetRepository
+          }
+          {
+            name: 'App_UseTriageRepoForUnmapped'
+            value: useTriageRepoForUnmapped
+          }
+          {
+            name: 'App_UnmappedRepository'
+            value: unmappedRepository
           }
           {
             name: 'App__WorkItemBackend'
