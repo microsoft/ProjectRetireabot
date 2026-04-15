@@ -27,37 +27,40 @@ param workItemBackend string = 'GitHub'
 
 @secure()
 @description('The PAT that allows EverGreen to interact with your GitHub repository.')
-param gitHubPAT string
+param gitHubPAT string = ''
 
 @description('App Id of the registered GitHub App')
-param gitHubAppId string
+param gitHubAppId string = ''
 
 @description('The install id of the GitHub App to be used for actions on repositories')
-param gitHubInstallId string
+param gitHubInstallId string = ''
 
 @description('The id the private key for access to the GitHub App should be stored as in the KeyVault')
-param gitHubPrivateKeyId string
+param gitHubPrivateKeyId string = ''
 
 @description('The path of the private key to be stored in the KeyVault for the GitHub App')
-param gitHubPrivateKeyPath string
+param gitHubPrivateKeyPath string = ''
 
-@description('Target GitHub Repository to create issues on from advisories')
-param targetRepository string
+@description('Target repository to create work items on from advisories')
+param targetRepository string = ''
 
 @description('(Optional) The resource group EverGreen should create issues for, leave blank any resource group')
-param targetResourceGroup string
+param targetResourceGroup string = ''
 
 @description('(Optional) What label should be attached to all work items to identify it was created by EverGreen. Default: advisor')
-param advisoryLabel string
+param advisoryLabel string = ''
 
 @description('(Optional) What label should be attached to parent work items to identify them. Default: tracking')
-param advisoryParentLabel string
+param advisoryParentLabel string = ''
 
 @description('(Optional) What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-')
-param advisoryLabelPrefix string
+param advisoryLabelPrefix string = ''
 
 @description('(Optional) What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-')
-param parentLabelPrefix string
+param parentLabelPrefix string = ''
+
+@description('(Optional) Whether parent work items should be created when processing advisories to track child work items')
+param createParentWorkItems bool = true
 
 @description('(Optional) Whether child work items should be created when processing advisories')
 param createChildWorkItems bool = true
@@ -66,7 +69,7 @@ param createChildWorkItems bool = true
 param useTriageRepoForUnmapped bool = true
 
 @description('(Optional) The repository work items should be created in when they are not mapped in perResourceGroup mode.')
-param unmappedRepository string
+param unmappedRepository string = ''
 
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
 param enableHTTPEndpoint bool = false
@@ -116,6 +119,9 @@ var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 
 
 // temporary
 var gitHubOnly = workItemBackend != 'GitHub' ? fail('Only GitHub WorkItem Backend is supported currently') : null
+var issueCheck = !createChildWorkItems && !createParentWorkItems
+  ? fail('You need at least one type of work item to be created when an advisory is found.')
+  : null
 
 var keyVaultResourceName = 'kv-${deploymentSuffix}'
 resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
@@ -138,7 +144,7 @@ resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
   }
 }
 
-resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (gitHubCredentialValidation != null && !empty(gitHubPAT) && workItemBackend == 'GitHub') {
+resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(gitHubPAT) && workItemBackend == 'GitHub') {
   parent: vault
   name: 'GithubPAT'
   properties: {
@@ -389,6 +395,10 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: parentLabelPrefix
           }
           {
+            name: 'App__CreateParentWorkItems'
+            value: createParentWorkItems
+          }
+          {
             name: 'App__CreateChildWorkItems'
             value: createChildWorkItems
           }
@@ -401,11 +411,11 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: targetRepository
           }
           {
-            name: 'App_UseTriageRepoForUnmapped'
+            name: 'App__UseTriageRepoForUnmapped'
             value: useTriageRepoForUnmapped
           }
           {
-            name: 'App_UnmappedRepository'
+            name: 'App__UnmappedRepository'
             value: unmappedRepository
           }
           {
@@ -413,7 +423,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: workItemBackend
           }
           {
-            name: 'Azure__WorkItemScope'
+            name: 'App__WorkItemScope'
             value: workItemScope
           }
           {

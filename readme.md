@@ -36,6 +36,7 @@ There are some key parameters you need to specify:
 | advisoryParentLabel          | `false`  | What label should be attached to parent work items to identify them. Default: tracking                                                                                   |
 | advisoryLabelPrefix          | `false`  | What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-                                                   |
 | parentLabelPrefix            | `false`  | What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-                                       |
+| createParentWorkItems        | `false`  | Whether parent work items should be created when processing advisories to track child work items                                                                         |
 | createChildWorkItems         | `false`  | Whether child work items should be created when processing advisories                                                                                                    |
 | deploymentName               | `false`  | A unique application/solution name for all resources in this deployment                                                                                                  |
 | deploymentUniqueText         | `false`  | Unique text value for the solution. This is used to ensure resource names are unique for global resource                                                                 |
