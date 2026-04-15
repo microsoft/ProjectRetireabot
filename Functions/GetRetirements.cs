@@ -17,7 +17,8 @@ namespace Retirebot.Functions
         private readonly Helpers.Azure.ManagementClient _managementClient;
         private readonly string _advisoryQuery;
 
-        private readonly bool _createChildWorkItems = true;
+        private readonly bool _createParentWorkItems;
+        private readonly bool _createChildWorkItems;
 
         private readonly string _targetRepository;
         private readonly WorkItemScope _workItemScope;
@@ -25,8 +26,6 @@ namespace Retirebot.Functions
 
         private readonly bool _assignCopilot;
         private readonly bool _enableHTTPEndpoint;
-
-        private readonly bool _createParentIssues;
 
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
@@ -46,21 +45,21 @@ namespace Retirebot.Functions
             _workItemClient = workItemClient;
 
             _targetRepository = _config.GetSection(ConfigKeys.App.TargetRepository).Get<string>() ?? throw new InvalidOperationException("App:TargetRepository is not configured.");
-            _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection(ConfigKeys.Azure.WorkItemScope).Get<string>() ?? "monolithic", true);
+            _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection(ConfigKeys.App.WorkItemScope).Get<string>() ?? "monolithic", true);
             _unmappedRepository = config.GetSection(ConfigKeys.App.UnmappedRepository).Get<string>() ?? string.Empty;
 
-            string? mappingJson = _config.GetSection(ConfigKeys.Azure.TargetResourceGroupMapping).Get<string>();
+            string? mappingJson = _config.GetSection(ConfigKeys.App.TargetResourceGroupMapping).Get<string>();
             _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
             _assignCopilot = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool?>() ?? false;
-            _createParentIssues = config.GetSection(ConfigKeys.Azure.CreateParentIssues).Get<bool?>() ?? true;
+            _createParentWorkItems = config.GetSection(ConfigKeys.App.CreateParentWorkItems).Get<bool?>() ?? true;
             _createChildWorkItems = _config.GetSection(ConfigKeys.App.CreateChildWorkItems).Get<bool?>() ?? true;
             _enableHTTPEndpoint = _config.GetSection(ConfigKeys.App.EnableHTTPEndpoint).Get<bool?>() ?? false;
             _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool?>() ?? true;
 
-            string? rg = _config.GetSection(ConfigKeys.Azure.TargetResourceGroup).Get<string>();
+            string? rg = _config.GetSection(ConfigKeys.App.TargetResourceGroup).Get<string>();
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
         }
 
@@ -197,7 +196,7 @@ namespace Retirebot.Functions
 
                 List<(Advisory, WorkItem)> createdIssues = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot) : [];
 
-                if (_createParentIssues)
+                if (_createParentWorkItems)
                 {
                     // Map existing issues back to their advisory by name
                     var existingPairs = existingIssues.Select(kvp =>
@@ -226,7 +225,7 @@ namespace Retirebot.Functions
                 }
             }
 
-            if (_createParentIssues)
+            if (_createParentWorkItems)
             {
                 foreach (var (typeId, childItemsByRepo) in childItemsByType)
                 {
