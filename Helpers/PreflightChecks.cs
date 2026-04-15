@@ -13,12 +13,20 @@ namespace Retirebot.Helpers
         [GeneratedRegex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$")]
         public static partial Regex RepoPattern();
 
-        public static void StartPreflightChecks(FunctionsApplicationBuilder hostBuilder, IHost host)
+        public static void StartPreflightChecks(FunctionsApplicationBuilder hostBuilder, IHost host, WorkItemBackend backend)
         {
             ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PreflightChecks");
+            IConfiguration config = hostBuilder.Configuration;
 
-            CheckTargetRepository(hostBuilder.Configuration);
-            CheckGitHubAuth(hostBuilder.Configuration, host, logger);
+
+            CheckTargetRepository(config);
+
+            switch (backend)
+            {
+                case WorkItemBackend.GitHub:
+                    CheckGitHubAuth(config, host, logger);
+                    break;
+            }
         }
 
         public static void CheckGitHubAuth(IConfiguration config, IHost host, ILogger logger)
@@ -48,12 +56,12 @@ namespace Retirebot.Helpers
 
         public static void CheckTargetRepository(IConfiguration config)
         {
-            string? targetRepo = config.GetSection(ConfigKeys.GitHub.TargetRepository).Get<string>();
+            string? targetRepo = config.GetSection(ConfigKeys.App.TargetRepository).Get<string>();
 
 
             if (targetRepo == null || !RepoPattern().IsMatch(targetRepo))
             {
-                throw new InvalidOperationException("GitHub:TargetRepository is empty or not in the expected 'owner/repo' format");
+                throw new InvalidOperationException("App:TargetRepository is empty or not in the expected 'owner/repo' format");
             }
         }
     }

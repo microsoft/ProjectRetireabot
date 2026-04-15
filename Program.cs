@@ -87,6 +87,6 @@ switch (backend)
 
 var app = builder.Build();
 
-PreflightChecks.StartPreflightChecks(builder, app);
+PreflightChecks.StartPreflightChecks(builder, app, backend);
 
 app.Run();
