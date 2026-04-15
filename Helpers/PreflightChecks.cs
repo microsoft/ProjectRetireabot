@@ -32,7 +32,7 @@ namespace Retirebot.Helpers
         public static void CheckGitHubAuth(IConfiguration config, IHost host, ILogger logger)
         {
             GitHub.AuthModeService service = host.Services.GetRequiredService<GitHub.AuthModeService>();
-            bool assignGHCP = config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool>();
+            bool assignCopilot = config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool?>() ?? false;
 
             switch (service.GetAuthMode())
             {
@@ -40,7 +40,7 @@ namespace Retirebot.Helpers
                     logger.LogInformation("Using Hybrid GitHub authentication (PAT + App)");
                     break;
                 case Models.GitHub.AuthMode.App:
-                    if (assignGHCP)
+                    if (assignCopilot)
                     {
                         logger.LogWarning("GitHub CoPilot assignment may fail on private repositories, consider using Hybrid mode");
                     }
