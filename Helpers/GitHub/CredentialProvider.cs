@@ -2,7 +2,6 @@
 using Azure.Identity;
 using Azure.Security.KeyVault.Keys;
 using Azure.Security.KeyVault.Keys.Cryptography;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.KeyVaultExtensions;
 using Microsoft.IdentityModel.Tokens;
@@ -26,7 +25,7 @@ namespace Retirebot.Helpers.GitHub
 
         private readonly AuthModeService _authModeSrv;
 
-        public CredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, DefaultAzureCredential credentials, AuthModeService authModeService, KeyClient? keyClient)
+        public CredentialProvider(ILoggerFactory loggerFactory, DefaultAzureCredential credentials, AuthModeService authModeService, KeyClient? keyClient)
         {
             _authModeSrv = authModeService;
             _keyClient = keyClient;
@@ -63,7 +62,7 @@ namespace Retirebot.Helpers.GitHub
             }
             return _primaryClient;
         }
-        
+
         public GitHubClient? GetCopilotCapableClient() => _coPilotClient;
 
         private async Task RefreshAppTokenAsync()
@@ -75,7 +74,8 @@ namespace Retirebot.Helpers.GitHub
 
                 _logger.LogInformation("Refreshing GitHub App Installation Client");
                 _primaryClient = CreateClient();
-            } finally
+            }
+            finally
             {
                 _refreshLock.Release();
             }
@@ -103,11 +103,11 @@ namespace Retirebot.Helpers.GitHub
             }
 
             CryptographyClient cryptoClient = _keyClient.GetCryptographyClient(key.Name, key.Properties.Version);
-            KeyVaultSecurityKey securityKey = new KeyVaultSecurityKey(key.Id.ToString(), async(auth, resource, scope) =>
+            KeyVaultSecurityKey securityKey = new KeyVaultSecurityKey(key.Id.ToString(), async (auth, resource, scope) =>
             {
                 var token = await _credentials.GetTokenAsync(
                     new TokenRequestContext(new[] { resource + "/.default" }));
-                return token.Token; 
+                return token.Token;
             });
 
             SigningCredentials signingCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.RsaSha256)

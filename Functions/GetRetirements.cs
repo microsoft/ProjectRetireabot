@@ -21,7 +21,7 @@ namespace Retirebot.Functions
         private readonly WorkItemScope _workItemScope;
         private readonly List<AzureRepositoryMap> _rgRepoMapping;
 
-        private readonly bool _assignGHCP;
+        private readonly bool _assignCopilot;
         private readonly bool _enableHTTPEndpoint;
 
         private readonly bool _createParentIssues;
@@ -50,7 +50,7 @@ namespace Retirebot.Functions
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
-            _assignGHCP = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool>();
+            _assignCopilot = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool>();
             _enableHTTPEndpoint = _config.GetSection(ConfigKeys.App.EnableHTTPEndpoint).Get<bool>();
 
             string? rg = _config.GetSection(ConfigKeys.Azure.TargetResourceGroup).Get<string>();
@@ -172,8 +172,8 @@ namespace Retirebot.Functions
 
             Dictionary<string, List<Advisory>> advisoriesByRepo = advisories.GroupBy(GetRepositoryForAdvisory).ToDictionary(g => g.Key, g => g.ToList());
 
-            // RecommendationTypeId -> (repo -> list of child issues)
-            Dictionary<string, Dictionary<string, List<WorkItem>>> childIssuesByType = [];
+            // RecommendationTypeId -> (repo -> list of child work items)
+            Dictionary<string, Dictionary<string, List<WorkItem>>> childItemsByType = [];
 
             // RecommendationTypeId -> representative advisory (for title/description)
             Dictionary<string, Advisory> representativeByType = [];
@@ -188,7 +188,7 @@ namespace Retirebot.Functions
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
                     existingIssues.Count, advisoriesToCreate.Count, repo);
 
-                List<(Advisory, WorkItem)> createdIssues = await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignGHCP);
+                List<(Advisory, WorkItem)> createdIssues = await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot);
 
                 if (_createParentIssues)
                 {
@@ -203,30 +203,30 @@ namespace Retirebot.Functions
                     {
                         string typeId = advisory.Properties.RecommendationTypeId;
 
-                        if (!childIssuesByType.ContainsKey(typeId))
+                        if (!childItemsByType.ContainsKey(typeId))
                         {
-                            childIssuesByType[typeId] = [];
+                            childItemsByType[typeId] = [];
                             representativeByType[typeId] = advisory;
                         }
 
-                        if (!childIssuesByType[typeId].ContainsKey(repo))
+                        if (!childItemsByType[typeId].ContainsKey(repo))
                         {
-                            childIssuesByType[typeId][repo] = [];
+                            childItemsByType[typeId][repo] = [];
                         }
 
-                        childIssuesByType[typeId][repo].Add(issue);
+                        childItemsByType[typeId][repo].Add(issue);
                     }
                 }
             }
 
             if (_createParentIssues)
             {
-                foreach (var (typeId, childIssuesByRepo) in childIssuesByType)
+                foreach (var (typeId, childItemsByRepo) in childItemsByType)
                 {
                     await _workItemClient.FindOrCreateParentAsync(
                         typeId,
                         representativeByType[typeId],
-                        childIssuesByRepo,
+                        childItemsByRepo,
                         _targetRepository);
                 }
             }
