@@ -36,6 +36,10 @@
         {
             public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
             public const string EnableHTTPEndpoint = "App:EnableHTTPEndpoint";
+            public const string AdvisoryLabel = "App:AdvisoryLabel";
+            public const string AdvisoryParentLabel = "App:AdvisoryParentLabel";
+            public const string AdvisoryLabelPrefix = "App:AdvisoryLabelPrefix";
+            public const string ParentLabelPrefix = "App:ParentLabelPrefix";
             public const string TargetRepository = "App:TargetRepository";
             public const string WorkItemBackend = "App:WorkItemBackend";
         }

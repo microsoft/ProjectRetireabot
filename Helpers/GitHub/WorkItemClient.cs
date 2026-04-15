@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Octokit;
 using Retirebot.Models;
 using Retirebot.Models.Azure;
@@ -9,16 +10,25 @@ namespace Retirebot.Helpers.GitHub
     public partial class WorkItemClient : IWorkItemClient
     {
         private const int MaxLabelLength = 50;
-        private const string AdvisoryLabelPrefix = "advisor-";
-        private const string ParentLabelPrefix = "advisor-type-";
+
+        private readonly string _advisoryLabel;
+        private readonly string _advisoryParentLabel;
+        private readonly string _advisoryLabelPrefix;
+        private readonly string _parentLabelPrefix;
 
         private readonly CredentialProvider _credentialProvider;
         private readonly ILogger _logger;
 
-        public WorkItemClient(ILoggerFactory loggerFactory, CredentialProvider credentialProvider)
+        public WorkItemClient(IConfiguration config, ILoggerFactory loggerFactory, CredentialProvider credentialProvider)
         {
             _logger = loggerFactory.CreateLogger<WorkItemClient>();
             _credentialProvider = credentialProvider;
+
+
+            _advisoryLabel = config.GetSection(ConfigKeys.App.AdvisoryLabel).Get<string>() ?? "azure-advisor";
+            _advisoryParentLabel = config.GetSection(ConfigKeys.App.AdvisoryParentLabel).Get<string>() ?? "tracking";
+            _advisoryLabelPrefix = config.GetSection(ConfigKeys.App.AdvisoryLabelPrefix).Get<string>() ?? "advisor-";
+            _parentLabelPrefix = config.GetSection(ConfigKeys.App.ParentLabelPrefix).Get<string>() ?? "advisor-type-";
         }
 
         private static WorkItem ToWorkItem(Issue issue)
@@ -63,7 +73,7 @@ namespace Retirebot.Helpers.GitHub
                     for (int j = 0; j < results.Items.Count; j++)
                     {
                         var issue = results.Items[j];
-                        var advisoryLabel = issue.Labels.FirstOrDefault(l => l.Name.StartsWith(AdvisoryLabelPrefix));
+                        var advisoryLabel = issue.Labels.FirstOrDefault(l => l.Name.StartsWith(_advisoryLabelPrefix));
 
                         if (advisoryLabel != null)
                         {
@@ -114,7 +124,7 @@ namespace Retirebot.Helpers.GitHub
 
                     // Add labels including the advisory GUID
                     newIssue.Labels.Add(GetAdvisoryLabel(advisory.Name));
-                    newIssue.Labels.Add("azure-advisor");
+                    newIssue.Labels.Add(_advisoryLabel);
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
                     if (assignCopilot) newIssue.Assignees.Add("copilot-swe-agent[bot]");
@@ -149,9 +159,9 @@ namespace Retirebot.Helpers.GitHub
                   .Select(p => (p.advisory, ToWorkItem(p.issue!)))];
         }
 
-        private static string GetAdvisoryLabel(string advisoryName)
+        private string GetAdvisoryLabel(string advisoryName)
         {
-            var label = $"{AdvisoryLabelPrefix}{advisoryName}";
+            var label = $"{_advisoryLabelPrefix}{advisoryName}";
             if (label.Length > MaxLabelLength)
             {
                 label = label[..MaxLabelLength];
@@ -159,9 +169,9 @@ namespace Retirebot.Helpers.GitHub
             return label;
         }
 
-        private static string GetParentLabel(string recommendationTypeId)
+        private string GetParentLabel(string recommendationTypeId)
         {
-            var label = $"{ParentLabelPrefix}{recommendationTypeId}";
+            var label = $"{_parentLabelPrefix}{recommendationTypeId}";
             if (label.Length > MaxLabelLength)
             {
                 label = label[..MaxLabelLength];
@@ -169,12 +179,12 @@ namespace Retirebot.Helpers.GitHub
             return label;
         }
 
-        private static string GenerateIssueTitle(Advisory advisory)
+        private string GenerateIssueTitle(Advisory advisory)
         {
             return $"{advisory.Properties.ShortDescription.Problem} - {advisory.Properties.ImpactedValue}";
         }
 
-        private static string GenerateIssueBody(Advisory advisory)
+        private string GenerateIssueBody(Advisory advisory)
         {
             var props = advisory.Properties;
             return $@"## Azure Advisor Recommendation
@@ -204,7 +214,7 @@ namespace Retirebot.Helpers.GitHub
         /// Parses task list items from a GitHub issue body.
         /// Matches lines like: - [ ] owner/repo#123 or - [x] owner/repo#123
         /// </summary>
-        private static (HashSet<string>, int, int) ParseTaskListReferences(string body)
+        private (HashSet<string>, int, int) ParseTaskListReferences(string body)
         {
             var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrEmpty(body)) return (references, -1, -1);
@@ -240,7 +250,10 @@ namespace Retirebot.Helpers.GitHub
                 : $"{childRepo}#{childIssue.Number}";
         }
 
-        private static string GenerateParentIssueBody(Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childIssuesByRepo, string parentRepo)
+        /// <summary>
+        /// Generates the body for the parent issue, with the description of the issue and references to the child issues.
+        /// </summary>
+        private string GenerateParentIssueBody(Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childIssuesByRepo, string parentRepo)
         {
             var props = representativeAdvisory.Properties;
             var taskListLines = childIssuesByRepo
@@ -280,6 +293,9 @@ namespace Retirebot.Helpers.GitHub
 ";
         }
 
+        /// <summary>
+        /// Tries to find a pre-existing parent issue tracking an advisory to check if it is up to date, if it doesn't exist, the parent issue will be created.
+        /// </summary>
         public async Task<WorkItem?> FindOrCreateParentAsync(string recommendationTypeId, Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childItemsByRepo, string parentRepo)
         {
             string parentLabel = GetParentLabel(recommendationTypeId);
@@ -287,7 +303,7 @@ namespace Retirebot.Helpers.GitHub
             Issue? existingParent = null;
             GitHubClient? ghClient = await _credentialProvider.GetPrimaryClient();
 
-            SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:{parentLabel}")
+            SearchIssuesRequest searchRequest = new SearchIssuesRequest($"repo:{parentRepo} label:{parentLabel}, {_advisoryParentLabel}")
             {
                 Type = IssueTypeQualifier.Issue,
                 Repos = new RepositoryCollection
@@ -358,8 +374,8 @@ namespace Retirebot.Helpers.GitHub
 
                 // Add labels including the advisory GUID
                 newIssue.Labels.Add(parentLabel);
-                newIssue.Labels.Add("azure-advisor");
-                newIssue.Labels.Add("tracking");
+                newIssue.Labels.Add(_advisoryLabel);
+                newIssue.Labels.Add(_advisoryParentLabel);
                 newIssue.Labels.Add(representativeAdvisory.Properties.Impact.ToLower());
 
                 var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
