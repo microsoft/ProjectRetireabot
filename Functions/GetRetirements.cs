@@ -17,6 +17,8 @@ namespace Retirebot.Functions
         private readonly Helpers.Azure.ManagementClient _managementClient;
         private readonly string _advisoryQuery;
 
+        private readonly bool _createChildWorkItems = true;
+
         private readonly string _targetRepository;
         private readonly WorkItemScope _workItemScope;
         private readonly List<AzureRepositoryMap> _rgRepoMapping;
@@ -45,19 +47,18 @@ namespace Retirebot.Functions
 
             _targetRepository = _config.GetSection(ConfigKeys.App.TargetRepository).Get<string>() ?? throw new InvalidOperationException("App:TargetRepository is not configured.");
             _workItemScope = Enum.Parse<WorkItemScope>(_config.GetSection(ConfigKeys.Azure.WorkItemScope).Get<string>() ?? "monolithic", true);
-
-            _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool>();
             _unmappedRepository = config.GetSection(ConfigKeys.App.UnmappedRepository).Get<string>() ?? string.Empty;
-
-            _createParentIssues = config.GetSection(ConfigKeys.Azure.CreateParentIssues).Get<bool>();
 
             string? mappingJson = _config.GetSection(ConfigKeys.Azure.TargetResourceGroupMapping).Get<string>();
             _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
-            _assignCopilot = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool>();
-            _enableHTTPEndpoint = _config.GetSection(ConfigKeys.App.EnableHTTPEndpoint).Get<bool>();
+            _assignCopilot = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool?>() ?? false;
+            _createParentIssues = config.GetSection(ConfigKeys.Azure.CreateParentIssues).Get<bool?>() ?? true;
+            _createChildWorkItems = _config.GetSection(ConfigKeys.App.CreateChildWorkItems).Get<bool?>() ?? true;
+            _enableHTTPEndpoint = _config.GetSection(ConfigKeys.App.EnableHTTPEndpoint).Get<bool?>() ?? false;
+            _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool?>() ?? true;
 
             string? rg = _config.GetSection(ConfigKeys.Azure.TargetResourceGroup).Get<string>();
             _advisoryQuery = rg != null ? $"{_baseQuery} | where resourceGroup has \"{rg}\"" : _baseQuery;
@@ -194,7 +195,7 @@ namespace Retirebot.Functions
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
                     existingIssues.Count, advisoriesToCreate.Count, repo);
 
-                List<(Advisory, WorkItem)> createdIssues = await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot);
+                List<(Advisory, WorkItem)> createdIssues = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot) : [];
 
                 if (_createParentIssues)
                 {

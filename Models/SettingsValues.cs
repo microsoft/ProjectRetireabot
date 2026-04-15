@@ -35,6 +35,7 @@
         public static class App
         {
             public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
+            public const string CreateChildWorkItems = "App:CreateChildWorkItems";
             public const string EnableHTTPEndpoint = "App:EnableHTTPEndpoint";
             public const string AdvisoryLabel = "App:AdvisoryLabel";
             public const string AdvisoryParentLabel = "App:AdvisoryParentLabel";
