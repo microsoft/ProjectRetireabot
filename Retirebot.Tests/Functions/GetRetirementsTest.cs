@@ -100,34 +100,7 @@ namespace Retirebot.Tests.Functions
                 .ReturnsAsync(new HttpResponseMessage
                 {
                     StatusCode = HttpStatusCode.OK,
-                    Content = new StringContent(JsonSerializer.Serialize(new
-                    {
-                        count = 1,
-                        totalRecords = 1,
-                        data = new[]
-                        {
-                        new
-                        {
-                            id = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Advisor/recommendations/rec-1",
-                            name = "rec-1",
-                            type = "Microsoft.Advisor/recommendations",
-                            subscriptionId = "sub-1",
-                            resourceGroup = "rg-1",
-                            location = "eastus",
-                            resourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/myapp",
-                            ServiceID = "type-1",
-                            impact = "High",
-                            category = "HighAvailability",
-                            impactedField = "Microsoft.Web/sites",
-                            impactedValue = "myapp",
-                            lastUpdated = "2025-01-01",
-                            retirementDate = "2026-06-01",
-                            retirementFeatureName = "App Service",
-                            maturityLevel = "GA",
-                            recommendationOfferingId = "offering-1",
-                        }
-                        }
-                    }), System.Text.Encoding.UTF8, "application/json")
+                    Content = new StringContent(JsonSerializer.Serialize(TestData.CreateRetirementQueryResponse(1)), System.Text.Encoding.UTF8, "application/json")
                 });
 
             var mockWorkItemClient = new Mock<IWorkItemClient>();
