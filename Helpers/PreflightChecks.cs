@@ -13,11 +13,9 @@ namespace Retirebot.Helpers
         [GeneratedRegex(@"^[a-zA-Z0-9\-]+/[a-zA-Z0-9._\-]+$")]
         public static partial Regex RepoPattern();
 
-        public static void StartPreflightChecks(FunctionsApplicationBuilder hostBuilder, IHost host, WorkItemBackend backend)
+        public static void StartPreflightChecks(IConfiguration config, IHost host, WorkItemBackend backend)
         {
             ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PreflightChecks");
-            IConfiguration config = hostBuilder.Configuration;
-
 
             CheckTargetRepository(config);
 
