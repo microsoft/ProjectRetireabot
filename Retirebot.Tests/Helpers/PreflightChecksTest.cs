@@ -9,12 +9,8 @@ namespace Retirebot.Tests.Helpers
 {
     public class PreflightChecksTest
     {
-        private static IConfiguration BuildConfig(Dictionary<string, string?> settings)
-        {
-            return new ConfigurationBuilder()
-            .AddInMemoryCollection(settings)
-            .Build();
-        }
+        private static IConfiguration BuildConfig(Dictionary<string, string?> settings) =>
+            new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
         [Theory]
         [InlineData("owner/repo")]

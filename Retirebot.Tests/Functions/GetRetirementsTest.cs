@@ -13,12 +13,8 @@ namespace Retirebot.Tests.Functions
 {
     public class GetRepositoryForAdvisoryTest
     {
-        private static IConfiguration BuildConfig(Dictionary<string, string?> settings)
-        {
-            return new ConfigurationBuilder()
-            .AddInMemoryCollection(settings)
-            .Build();
-        }
+        private static IConfiguration BuildConfig(Dictionary<string, string?> settings) =>
+            new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
         private static (Retirebot.Helpers.Azure.ManagementClient client, Mock<HttpMessageHandler> handler) BuildMockManagementClient()
         {
