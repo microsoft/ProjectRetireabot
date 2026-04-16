@@ -9,7 +9,7 @@ using Retirebot.Helpers;
 using Retirebot.Models;
 using Retirebot.Models.Azure;
 
-namespace Retirebot.Tests
+namespace Retirebot.Tests.Functions
 {
     public class GetRepositoryForAdvisoryTest
     {
@@ -20,7 +20,7 @@ namespace Retirebot.Tests
             .Build();
         }
 
-        private static (Helpers.Azure.ManagementClient client, Mock<HttpMessageHandler> handler) BuildMockManagementClient()
+        private static (Retirebot.Helpers.Azure.ManagementClient client, Mock<HttpMessageHandler> handler) BuildMockManagementClient()
         {
             var handler = new Mock<HttpMessageHandler>();
             var httpClient = new HttpClient(handler.Object)
@@ -28,7 +28,7 @@ namespace Retirebot.Tests
                 BaseAddress = new Uri("https://management.azure.com/")
             };
 
-            return (new Helpers.Azure.ManagementClient(httpClient), handler);
+            return (new Retirebot.Helpers.Azure.ManagementClient(httpClient), handler);
         }
 
         private static void SetupHttpResource(Mock<HttpMessageHandler> handler, object responseBody)

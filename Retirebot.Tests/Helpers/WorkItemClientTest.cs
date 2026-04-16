@@ -1,9 +1,8 @@
 using Moq;
 using Retirebot.Helpers;
 using Retirebot.Models.Azure;
-using Xunit.Sdk;
 
-namespace Retirebot.Tests
+namespace Retirebot.Tests.Helpers
 {
     public class WorkItemClientTest
     {

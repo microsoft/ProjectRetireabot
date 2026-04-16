@@ -1,7 +1,7 @@
 using Moq;
 using Moq.Protected;
 
-namespace Retirebot.Tests
+namespace Retirebot.Tests.Helpers.Azure
 {
     public class ManagementClientTest
     {
@@ -24,7 +24,7 @@ namespace Retirebot.Tests
                 BaseAddress = new Uri("https://management.azure.com/")
             };
 
-            var client = new Helpers.Azure.ManagementClient(httpClient);
+            var client = new Retirebot.Helpers.Azure.ManagementClient(httpClient);
             var subs = await client.GetSubscriptionsAsync();
 
             Assert.Single(subs);
