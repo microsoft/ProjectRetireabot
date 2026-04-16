@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
-using Octokit;
 using Retirebot.Functions;
 using Retirebot.Helpers;
 using Retirebot.Models;
@@ -12,7 +11,7 @@ using Retirebot.Models.Azure;
 
 namespace Retirebot.Tests.Functions
 {
-    public class GetRepositoryForAdvisoryTest
+    public class GetRetirementsTest
     {
         private static IConfiguration BuildConfig(Dictionary<string, string?> settings) =>
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
@@ -40,6 +39,30 @@ namespace Retirebot.Tests.Functions
                     "application/json"
                 )
             });
+        }
+
+        private static void SetupSubscriptionAndQueryResponse(
+            Mock<HttpMessageHandler> handler, int advisoryCount = 1)
+        {
+            handler.Protected()
+                .SetupSequence<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                // subscriptions response
+                .ReturnsAsync(new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(
+                        JsonSerializer.Serialize(new { value = new[] { new { subscriptionId = "sub-1" } } }),
+                        System.Text.Encoding.UTF8, "application/json")
+                })
+                // resource graph query response
+                .ReturnsAsync(new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent(JsonSerializer.Serialize(TestData.CreateRetirementQueryResponse(1)), System.Text.Encoding.UTF8, "application/json")
+                });
         }
 
         [Fact]
@@ -80,25 +103,7 @@ namespace Retirebot.Tests.Functions
 
             var (mgmtClient, handler) = BuildMockManagementClient();
 
-            handler.Protected()
-                .SetupSequence<Task<HttpResponseMessage>>(
-                    "SendAsync",
-                    ItExpr.IsAny<HttpRequestMessage>(),
-                    ItExpr.IsAny<CancellationToken>())
-                // subscriptions response
-                .ReturnsAsync(new HttpResponseMessage
-                {
-                    StatusCode = HttpStatusCode.OK,
-                    Content = new StringContent(
-                        JsonSerializer.Serialize(new { value = new[] { new { subscriptionId = "sub-1" } } }),
-                        System.Text.Encoding.UTF8, "application/json")
-                })
-                // resource graph query response
-                .ReturnsAsync(new HttpResponseMessage
-                {
-                    StatusCode = HttpStatusCode.OK,
-                    Content = new StringContent(JsonSerializer.Serialize(TestData.CreateRetirementQueryResponse(1)), System.Text.Encoding.UTF8, "application/json")
-                });
+            SetupSubscriptionAndQueryResponse(handler, advisoryCount: 1);
 
             var mockWorkItemClient = new Mock<IWorkItemClient>();
             mockWorkItemClient
@@ -132,25 +137,7 @@ namespace Retirebot.Tests.Functions
 
             var (mgmtClient, handler) = BuildMockManagementClient();
 
-            handler.Protected()
-               .SetupSequence<Task<HttpResponseMessage>>("SendAsync",
-               ItExpr.IsAny<HttpRequestMessage>(),
-               ItExpr.IsAny<CancellationToken>())
-               .ReturnsAsync(new HttpResponseMessage
-               {
-                   StatusCode = HttpStatusCode.OK,
-                   Content = new StringContent(
-                    JsonSerializer.Serialize(new { value = new[] { new { subscriptionId = "sub-1" } } }),
-                    System.Text.Encoding.UTF8, "application/json"
-                   )
-               })
-               .ReturnsAsync(new HttpResponseMessage
-               {
-                   StatusCode = HttpStatusCode.OK,
-                   Content = new StringContent(
-                        JsonSerializer.Serialize(TestData.CreateRetirementQueryResponse(1)),
-                        System.Text.Encoding.UTF8, "application/json")
-               });
+            SetupSubscriptionAndQueryResponse(handler, advisoryCount: 1);
 
             var mockWorkItemClient = new Mock<IWorkItemClient>();
 
