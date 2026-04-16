@@ -20,7 +20,7 @@ namespace Retirebot.Tests.Helpers
         [InlineData("owner/repo")]
         [InlineData("my-org/my-repo.name")]
         [InlineData("ZanyLeonic/RetireBot")]
-        public async Task CheckTargetRepository_ValidRepo_DoesNotThrow(string repo)
+        public void CheckTargetRepository_ValidRepo_DoesNotThrow(string repo)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
@@ -36,7 +36,7 @@ namespace Retirebot.Tests.Helpers
         [InlineData("noslash")]
         [InlineData("owner/repo/extra")]
         [InlineData("owner/ repo")]
-        public async Task PreflightChecks_TestInvalidRepository(string repo)
+        public void PreflightChecks_TestInvalidRepository(string repo)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
@@ -47,7 +47,7 @@ namespace Retirebot.Tests.Helpers
         }
 
         [Fact]
-        public async Task CheckGitHubAuth_NoCredentials_Throws()
+        public void CheckGitHubAuth_NoCredentials_Throws()
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
