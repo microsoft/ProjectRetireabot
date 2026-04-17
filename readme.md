@@ -40,7 +40,7 @@ There are some key parameters you need to specify:
 | createChildWorkItems         | `false`  | Whether child work items should be created when processing advisories                                                                                                    |
 | deploymentName               | `false`  | A unique application/solution name for all resources in this deployment                                                                                                  |
 | deploymentUniqueText         | `false`  | Unique text value for the solution. This is used to ensure resource names are unique for global resource                                                                 |
-| enableHTTPEndpoint           | `false`  | Whether the manual HTTP endpoint should be enabled.                                                                                                                      |
+| httpEndpointEnable           | `false`  | Whether the manual HTTP endpoint should be enabled.                                                                                                                      |
 | gitHubCoPilotAssign          | `false`  | Whether GitHub CoPilot should be assigned to try and mitigate issues (requires a GitHub CoPilot license) Default: false                                                  |
 | resourceGroupRepositoryMap   | `false`  | If "perResourceGroup" mode is being used, these mappings decide which repositories issues are created based on their resource groups.                                    |
 | useTriageRepoForUnmapped     | `false`  | Should unmapped resources have their work items created in the triage repository/target repository in perResourceGroup mode. Default: true                               |

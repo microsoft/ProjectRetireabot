@@ -72,7 +72,7 @@ param useTriageRepoForUnmapped bool = true
 param unmappedRepository string = ''
 
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
-param enableHTTPEndpoint bool = false
+param httpEndpointEnable bool = false
 
 @description('(Optional) Whether GitHub CoPilot should be assigned to issues created by EverGreen')
 param gitHubCoPilotAssign bool = false
@@ -403,8 +403,8 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: createChildWorkItems
           }
           {
-            name: 'App__EnableHTTPEndpoint'
-            value: enableHTTPEndpoint
+            name: 'App__HTTPEndpointEnable'
+            value: httpEndpointEnable
           }
           {
             name: 'App__TargetRepository'

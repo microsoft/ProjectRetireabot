@@ -32,7 +32,8 @@
             public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
             public const string CreateParentWorkItems = "App:CreateParentWorkItems";
             public const string CreateChildWorkItems = "App:CreateChildWorkItems";
-            public const string EnableHTTPEndpoint = "App:EnableHTTPEndpoint";
+            public const string HTTPEndpointEnable = "App:HTTPEndpointEnable";
+            public const string HTTPEndpointOutput = "App:HTTPEndpointOutput";
             public const string ParentLabelPrefix = "App:ParentLabelPrefix";
             public const string TargetRepository = "App:TargetRepository";
             public const string TargetResourceGroupMapping = "App:TargetResourceGroupMapping";

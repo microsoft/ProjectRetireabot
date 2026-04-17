@@ -25,7 +25,7 @@ namespace Retirebot.Functions
         private readonly List<AzureRepositoryMap> _rgRepoMapping;
 
         private readonly bool _assignCopilot;
-        private readonly bool _enableHTTPEndpoint;
+        private readonly bool _httpEndpointEnable;
 
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
@@ -56,7 +56,7 @@ namespace Retirebot.Functions
             _assignCopilot = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool?>() ?? false;
             _createParentWorkItems = config.GetSection(ConfigKeys.App.CreateParentWorkItems).Get<bool?>() ?? true;
             _createChildWorkItems = _config.GetSection(ConfigKeys.App.CreateChildWorkItems).Get<bool?>() ?? true;
-            _enableHTTPEndpoint = _config.GetSection(ConfigKeys.App.EnableHTTPEndpoint).Get<bool?>() ?? false;
+            _httpEndpointEnable = _config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool?>() ?? false;
             _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool?>() ?? true;
 
             string? rg = _config.GetSection(ConfigKeys.App.TargetResourceGroup).Get<string>();
@@ -74,9 +74,9 @@ namespace Retirebot.Functions
         [Function("GetRetirementsManual")]
         public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
         {
-            if (!_enableHTTPEndpoint)
+            if (!_httpEndpointEnable)
             {
-                _logger.LogDebug("Manual Endpoint hit when App:EnableHTTPEndpoint is disabled");
+                _logger.LogDebug("Manual Endpoint hit when App:HTTPEndpointEnable is disabled");
                 return req.CreateResponse(HttpStatusCode.NotFound);
             }
 
