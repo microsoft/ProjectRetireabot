@@ -25,7 +25,9 @@ namespace Retirebot.Functions
         private readonly List<AzureRepositoryMap> _rgRepoMapping;
 
         private readonly bool _assignCopilot;
+
         private readonly bool _httpEndpointEnable;
+        private readonly bool _httpEndpointOutput;
 
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
@@ -57,6 +59,7 @@ namespace Retirebot.Functions
             _createParentWorkItems = config.GetSection(ConfigKeys.App.CreateParentWorkItems).Get<bool?>() ?? true;
             _createChildWorkItems = _config.GetSection(ConfigKeys.App.CreateChildWorkItems).Get<bool?>() ?? true;
             _httpEndpointEnable = _config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool?>() ?? false;
+            _httpEndpointOutput = _config.GetSection(ConfigKeys.App.HTTPEndpointOutput).Get<bool?>() ?? false;
             _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool?>() ?? true;
 
             string? rg = _config.GetSection(ConfigKeys.App.TargetResourceGroup).Get<string>();
@@ -66,14 +69,28 @@ namespace Retirebot.Functions
         [Function("GetRetirements")]
         public async Task RunTimer([TimerTrigger("%App:TimerTrigger%")] TimerInfo timerInfo)
         {
+            Stopwatch sw = Stopwatch.StartNew();
             _logger.LogInformation("Retrieving Retirements via Timer");
+
+            try
+            {
             await GetRetirementsASync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Caught exception whilst trying to fetch retirements.\n{Exception}", ex);
+            }
+
+            sw.Stop();
+            _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
             _logger.LogInformation("Next timer schedule = {NextSchedule}", timerInfo.ScheduleStatus?.Next);
         }
 
         [Function("GetRetirementsManual")]
         public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
         {
+            Stopwatch sw = Stopwatch.StartNew();
+
             if (!_httpEndpointEnable)
             {
                 _logger.LogDebug("Manual Endpoint hit when App:HTTPEndpointEnable is disabled");
@@ -84,18 +101,38 @@ namespace Retirebot.Functions
 
             try
             {
-                await GetRetirementsASync();
+                GetRetirementsResponse retireResult = await GetRetirementsASync(whatIf);
+                sw.Stop();
 
-                var response = req.CreateResponse(HttpStatusCode.OK);
-                await response.WriteStringAsync("Completed successfully.");
+                retireResult.TimeElapsed = sw.Elapsed.TotalSeconds;
+
+                var response = req.CreateResponse(retireResult.Result == GetRetirementsResult.Success ? HttpStatusCode.OK : HttpStatusCode.InternalServerError);
+                await response.WriteAsJsonAsync(_httpEndpointOutput ? retireResult : new GetRetirementsResponse() { Result = GetRetirementsResult.Success, ResultDescription = "Function ran successfully." });
+
                 return response;
             }
             catch (Exception ex)
             {
                 _logger.LogError("Caught exception whilst handling request.\n{Exception}", ex);
                 var response = req.CreateResponse(HttpStatusCode.InternalServerError);
-                await response.WriteStringAsync("Error whilst completing action. Please check App Insights for more information.");
+
+                sw.Stop();
+
+                GetRetirementsResponse retireResp = new GetRetirementsResponse() { Result = GetRetirementsResult.Failure, ResultDescription = "Error whilst completing action. Please check App Insights for more information." };
+
+                if (_httpEndpointOutput)
+                {
+                    retireResp.ResultDescription = $"Caught exception whilst handling request.\n{ex}";
+                    retireResp.TimeElapsed = sw.Elapsed.TotalSeconds;
+                }
+
+                await response.WriteAsJsonAsync(retireResp);
+
                 return response;
+            }
+            finally
+            {
+                _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
             }
         }
 
@@ -161,7 +198,8 @@ namespace Retirebot.Functions
             if (subs is null || subs.Length == 0)
             {
                 _logger.LogWarning("No subscriptions returned; aborting.");
-                return;
+
+                return new GetRetirementsResponse() { Result = GetRetirementsResult.Failure, ResultDescription = "No subscriptions returned" };
             }
 
             List<Advisory> advisories = new List<Advisory>();
@@ -184,28 +222,31 @@ namespace Retirebot.Functions
             // RecommendationTypeId -> representative advisory (for title/description)
             Dictionary<string, Advisory> representativeByType = [];
 
+            List<WorkItem>? allExistingWorkItems = _httpEndpointOutput ? [] : null;
+            List<WorkItem>? allCreatedWorkItems = _httpEndpointOutput ? [] : null;
+
             foreach (var (repo, repoAdvisories) in advisoriesByRepo)
             {
                 _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
 
-                Dictionary<string, WorkItem> existingIssues = await _workItemClient.FindExistingByAdvisoryAsync(repoAdvisories, repo);
-                List<Advisory> advisoriesToCreate = repoAdvisories.Where(a => !existingIssues.ContainsKey(a.Name)).ToList();
+                Dictionary<string, WorkItem> existingWorkItems = await _workItemClient.FindExistingByAdvisoryAsync(repoAdvisories, repo);
+                List<Advisory> advisoriesToCreate = repoAdvisories.Where(a => !existingWorkItems.ContainsKey(a.Name)).ToList();
 
-                _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new issues in {Repo}",
-                    existingIssues.Count, advisoriesToCreate.Count, repo);
+                _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new work items in {Repo}",
+                    existingWorkItems.Count, advisoriesToCreate.Count, repo);
 
-                List<(Advisory, WorkItem)> createdIssues = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot) ?? [] : [];
+                List<(Advisory, WorkItem)> createdWorkItems = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot) ?? [] : [];
 
                 if (_createParentWorkItems)
                 {
                     // Map existing issues back to their advisory by name
-                    var existingPairs = existingIssues.Select(kvp =>
+                    var existingPairs = existingWorkItems.Select(kvp =>
                     {
                         var advisory = repoAdvisories.First(a => a.Name == kvp.Key);
-                        return (advisory, issue: kvp.Value);
+                        return (advisory, workItem: kvp.Value);
                     });
 
-                    foreach (var (advisory, issue) in createdIssues.Concat(existingPairs))
+                    foreach (var (advisory, workItem) in createdWorkItems.Concat(existingPairs))
                     {
                         string typeId = advisory.Properties.RecommendationTypeId;
 
@@ -220,8 +261,14 @@ namespace Retirebot.Functions
                             childItemsByType[typeId][repo] = [];
                         }
 
-                        childItemsByType[typeId][repo].Add(issue);
+                        childItemsByType[typeId][repo].Add(workItem);
                     }
+                }
+
+                if (_httpEndpointOutput)
+                {
+                    allExistingWorkItems!.AddRange(existingWorkItems.Values);
+                    allCreatedWorkItems!.AddRange(createdWorkItems.Select(wk => wk.Item2));
                 }
             }
 
@@ -237,8 +284,16 @@ namespace Retirebot.Functions
                 }
             }
 
-            sw.Stop();
-            _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
+            GetRetirementsResponse response = new GetRetirementsResponse() { Result = GetRetirementsResult.Success, ResultDescription = "Function ran with no issues." };
+
+            if (_httpEndpointOutput)
+            {
+                response.Advisories = advisories;
+                response.ExistingWorkItems = allExistingWorkItems;
+                response.NewWorkItems = allCreatedWorkItems;
+            }
+
+            return response;
         }
     }
 }
