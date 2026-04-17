@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Retirebot.Helpers;
 using Retirebot.Models;
+using Retirebot.Models.HTTP;
 using Retirebot.Models.Azure;
 using System.Diagnostics;
 using System.Net;
@@ -148,6 +149,10 @@ namespace Retirebot.Functions
             finally
             {
                 _logger.LogInformation("Function ran. Approximately took {ElapsedSeconds} second(s)", sw.Elapsed.TotalSeconds);
+                if (whatIf)
+                {
+                    _logger.LogInformation("[WhatIf] Dry-run complete");
+                }
             }
         }
 
@@ -286,16 +291,23 @@ namespace Retirebot.Functions
                 }
             }
 
+            List<ParentWorkItemResult>? parentWorkItems = _createParentWorkItems ? new List<ParentWorkItemResult>() : null;
+
             if (_createParentWorkItems)
             {
                 foreach (var (typeId, childItemsByRepo) in childItemsByType)
                 {
-                    await _workItemClient.FindOrCreateParentAsync(
+                    ParentWorkItemResult? result = await _workItemClient.FindOrCreateParentAsync(
                         typeId,
                         representativeByType[typeId],
                         childItemsByRepo,
                         _targetRepository,
                         whatIf);
+
+                    if (result != null)
+                    {
+                        parentWorkItems!.Add(result);
+                    }
                 }
             }
 
@@ -306,6 +318,7 @@ namespace Retirebot.Functions
                 response.Advisories = advisories;
                 response.ExistingWorkItems = allExistingWorkItems;
                 response.NewWorkItems = allCreatedWorkItems;
+                response.ParentWorkItems = parentWorkItems;
                 response.WhatIf = whatIf;
             }
 
