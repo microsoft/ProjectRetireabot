@@ -17,5 +17,6 @@ namespace Retirebot.Models
         public List<WorkItem>? ExistingWorkItems { get; set; }
         public List<WorkItem>? NewWorkItems { get; set; }
         public double TimeElapsed { get; set; }
+        public bool WhatIf { get; set; }
     }
 }

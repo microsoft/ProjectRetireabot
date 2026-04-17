@@ -34,6 +34,7 @@
             public const string CreateChildWorkItems = "App:CreateChildWorkItems";
             public const string HTTPEndpointEnable = "App:HTTPEndpointEnable";
             public const string HTTPEndpointOutput = "App:HTTPEndpointOutput";
+            public const string HTTPEndpointWhatIf = "App:HTTPEndpointWhatIf";
             public const string ParentLabelPrefix = "App:ParentLabelPrefix";
             public const string TargetRepository = "App:TargetRepository";
             public const string TargetResourceGroupMapping = "App:TargetResourceGroupMapping";

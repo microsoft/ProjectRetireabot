@@ -28,6 +28,7 @@ namespace Retirebot.Functions
 
         private readonly bool _httpEndpointEnable;
         private readonly bool _httpEndpointOutput;
+        private readonly bool _httpEndpointWhatIf;
 
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
@@ -60,6 +61,7 @@ namespace Retirebot.Functions
             _createChildWorkItems = _config.GetSection(ConfigKeys.App.CreateChildWorkItems).Get<bool?>() ?? true;
             _httpEndpointEnable = _config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool?>() ?? false;
             _httpEndpointOutput = _config.GetSection(ConfigKeys.App.HTTPEndpointOutput).Get<bool?>() ?? false;
+            _httpEndpointWhatIf = _config.GetSection(ConfigKeys.App.HTTPEndpointWhatIf).Get<bool?>() ?? false;
             _useTriageRepoForUnmapped = config.GetSection(ConfigKeys.App.UseTriageRepoForUnmapped).Get<bool?>() ?? true;
 
             string? rg = _config.GetSection(ConfigKeys.App.TargetResourceGroup).Get<string>();
@@ -89,14 +91,26 @@ namespace Retirebot.Functions
         [Function("GetRetirementsManual")]
         public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
         {
-            Stopwatch sw = Stopwatch.StartNew();
-
             if (!_httpEndpointEnable)
             {
                 _logger.LogDebug("Manual Endpoint hit when App:HTTPEndpointEnable is disabled");
                 return req.CreateResponse(HttpStatusCode.NotFound);
             }
 
+            bool whatIf = req.Query["whatIf"] == "true";
+
+            if (whatIf && !_httpEndpointWhatIf)
+            {
+                _logger.LogDebug("Dry run requested, when App:HTTPEndpointWhatIf is disabled.");
+                return req.CreateResponse(HttpStatusCode.NotFound);
+            }
+
+            if (whatIf)
+            {
+                _logger.LogInformation("[WhatIf] Performing a dry-run...");
+            }
+
+            Stopwatch sw = Stopwatch.StartNew();
             _logger.LogInformation("Retrieving Retirements via HTTP Manual trigger");
 
             try
@@ -183,10 +197,9 @@ namespace Retirebot.Functions
             return mapping?.Repository ?? ((!_useTriageRepoForUnmapped && _unmappedRepository != string.Empty) ? _unmappedRepository : _targetRepository);
         }
 
-        public async Task GetRetirementsASync()
+        public async Task<GetRetirementsResponse> GetRetirementsASync(bool whatIf = false)
         {
-            Stopwatch sw = Stopwatch.StartNew();
-            _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
+                        _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
 
             if (_rgRepoMapping.Any(m => m.Type == AzureContainerType.ManagementGroup))
             {
