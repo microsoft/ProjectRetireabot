@@ -74,6 +74,12 @@ param unmappedRepository string = ''
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
 param httpEndpointEnable bool = false
 
+@description('(Optional) Whether the manual HTTP endpoint should display extended information about its run. Default false')
+param httpEndpointOutput bool = false
+
+@description('(Optional) Whether the manual HTTP endpoint should allow users to run dry-runs. Default false')
+param httpEndpointWhatIf bool = false
+
 @description('(Optional) Whether GitHub CoPilot should be assigned to issues created by EverGreen')
 param gitHubCoPilotAssign bool = false
 
@@ -405,6 +411,14 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           {
             name: 'App__HTTPEndpointEnable'
             value: httpEndpointEnable
+          }
+          {
+            name: 'App__HTTPEndpointOutput'
+            value: httpEndpointOutput
+          }
+          {
+            name: 'App__HTTPEndpointWhatIf'
+            value: httpEndpointWhatIf
           }
           {
             name: 'App__TargetRepository'
