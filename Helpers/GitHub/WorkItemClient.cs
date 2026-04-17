@@ -100,7 +100,7 @@ namespace Retirebot.Helpers.GitHub
             return existingIssues;
         }
 
-        public async Task<List<(Advisory, WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot)
+        public async Task<List<(Advisory, WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot, bool whatIf)
         {
             SemaphoreSlim semaphore = new SemaphoreSlim(5);
 
@@ -131,11 +131,29 @@ namespace Retirebot.Helpers.GitHub
 
                     string[] repoParts = targetRepo.Split("/");
 
+                    if (whatIf)
+                    {
+                        _logger.LogInformation("[WhatIf] Would create issue for advisory {AdvisoryId}: {Title}",
+                            advisory.Name, newIssue.Title);
+
+                        return new WorkItem()
+                        {
+                            Id = "",
+                            Number = 0,
+                            Title = newIssue.Title,
+                            Body = newIssue.Body ?? string.Empty,
+                            Labels = newIssue.Labels.ToList(),
+                            Assignees = newIssue.Assignees.ToList(),
+                            State = WorkItemState.Open,
+                            Url = null
+                        };
+                    }
+
                     var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
                     _logger.LogInformation("Created issue #{Number} for advisory {AdvisoryId}",
                         created.Number, advisory.Name);
 
-                    return created;
+                    return ToWorkItem(created);
                 }
                 catch (Exception ex)
                 {
@@ -156,7 +174,7 @@ namespace Retirebot.Helpers.GitHub
             }
             return [.. results.Select((r, i) => (advisory: advisories[i], issue: r))
                   .Where(p => p.issue != null)
-                  .Select(p => (p.advisory, ToWorkItem(p.issue!)))];
+                  .Select(p => (p.advisory, p.issue!))];
         }
 
         private string GetAdvisoryLabel(string advisoryName)
@@ -296,7 +314,7 @@ namespace Retirebot.Helpers.GitHub
         /// <summary>
         /// Tries to find a pre-existing parent issue tracking an advisory to check if it is up to date, if it doesn't exist, the parent issue will be created.
         /// </summary>
-        public async Task<WorkItem?> FindOrCreateParentAsync(string recommendationTypeId, Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childItemsByRepo, string parentRepo)
+        public async Task<WorkItem?> FindOrCreateParentAsync(string recommendationTypeId, Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childItemsByRepo, string parentRepo, bool whatIf)
         {
             string parentLabel = GetParentLabel(recommendationTypeId);
             string[] repoParts = parentRepo.Split("/");
@@ -337,7 +355,7 @@ namespace Retirebot.Helpers.GitHub
                     return ToWorkItem(existingParent);
                 }
 
-                var existingTaskLines = TaskListPattern().Matches(existingParent.Body).Select(m => m.Value.Trim());
+                var existingTaskLines = TaskListPattern().Matches(existingParent.Body).Select(m => m.Value.Trim()).ToList();
                 var allTaskLines = existingTaskLines.Concat(newRefs.Select(r => $"- [ ] {r}"));
                 string newSection = $"### Affected Resources ({allRefs.Count})\n{string.Join("\n", allTaskLines)}\n";
 
@@ -355,6 +373,19 @@ namespace Retirebot.Helpers.GitHub
                     update.State = ItemState.Open;
                     _logger.LogInformation("Reopening parent issue #{Number} — new affected resources found", existingParent.Number);
                 }
+
+                if (whatIf)
+                {
+                    _logger.LogInformation("[WhatIf] Parent Issue #{Number} with {Count} (vs {ExistingCount}) new child references for recommendation {TypeId} would be updated", existingParent.Number, newRefs.Count, existingTaskLines.Count, recommendationTypeId);
+
+                    WorkItem newWorkItem = ToWorkItem(existingParent);
+
+                    newWorkItem.Body = updatedBody;
+                    newWorkItem.State = WorkItemState.Open;
+
+                    return newWorkItem;
+                }
+
 
                 Issue updated = await ghClient.Issue.Update(repoParts[0], repoParts[1], existingParent.Number, update);
                 _logger.LogInformation("Updated parent issue #{Number} with {Count} new child references for recommendation {TypeId}",
@@ -377,6 +408,24 @@ namespace Retirebot.Helpers.GitHub
                 newIssue.Labels.Add(_advisoryLabel);
                 newIssue.Labels.Add(_advisoryParentLabel);
                 newIssue.Labels.Add(representativeAdvisory.Properties.Impact.ToLower());
+
+                if (whatIf)
+                {
+                    _logger.LogInformation("[WhatIf] Would create a new parent issue for recommendation {TypeId} with {Count} child issues",
+                        recommendationTypeId, childItemsByRepo.Values.Sum(i => i.Count));
+
+                    return new WorkItem()
+                    {
+                        Id = "",
+                        Number = 0,
+                        Title = newIssue.Title,
+                        Body = newIssue.Body ?? string.Empty,
+                        Labels = newIssue.Labels.ToList(),
+                        Assignees = newIssue.Assignees.ToList(),
+                        State = WorkItemState.Open,
+                        Url = null
+                    };
+                }
 
                 var created = await ghClient.Issue.Create(repoParts[0], repoParts[1], newIssue);
                 _logger.LogInformation("Created parent issue #{Number} for recommendation {TypeId} with {Count} child issues",

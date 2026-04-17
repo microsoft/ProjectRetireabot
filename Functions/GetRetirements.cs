@@ -76,7 +76,7 @@ namespace Retirebot.Functions
 
             try
             {
-            await GetRetirementsASync();
+                await GetRetirementsASync();
             }
             catch (Exception ex)
             {
@@ -138,6 +138,7 @@ namespace Retirebot.Functions
                 {
                     retireResp.ResultDescription = $"Caught exception whilst handling request.\n{ex}";
                     retireResp.TimeElapsed = sw.Elapsed.TotalSeconds;
+                    retireResp.WhatIf = whatIf;
                 }
 
                 await response.WriteAsJsonAsync(retireResp);
@@ -199,7 +200,7 @@ namespace Retirebot.Functions
 
         public async Task<GetRetirementsResponse> GetRetirementsASync(bool whatIf = false)
         {
-                        _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
+            _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
 
             if (_rgRepoMapping.Any(m => m.Type == AzureContainerType.ManagementGroup))
             {
@@ -212,7 +213,7 @@ namespace Retirebot.Functions
             {
                 _logger.LogWarning("No subscriptions returned; aborting.");
 
-                return new GetRetirementsResponse() { Result = GetRetirementsResult.Failure, ResultDescription = "No subscriptions returned" };
+                return new GetRetirementsResponse() { Result = GetRetirementsResult.Failure, ResultDescription = "No subscriptions returned", WhatIf = whatIf };
             }
 
             List<Advisory> advisories = new List<Advisory>();
@@ -248,7 +249,7 @@ namespace Retirebot.Functions
                 _logger.LogInformation("Found {ExistingCount} existing issues, creating {NewCount} new work items in {Repo}",
                     existingWorkItems.Count, advisoriesToCreate.Count, repo);
 
-                List<(Advisory, WorkItem)> createdWorkItems = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot) ?? [] : [];
+                List<(Advisory, WorkItem)> createdWorkItems = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot, whatIf) ?? [] : [];
 
                 if (_createParentWorkItems)
                 {
@@ -293,7 +294,8 @@ namespace Retirebot.Functions
                         typeId,
                         representativeByType[typeId],
                         childItemsByRepo,
-                        _targetRepository);
+                        _targetRepository,
+                        whatIf);
                 }
             }
 
@@ -304,6 +306,7 @@ namespace Retirebot.Functions
                 response.Advisories = advisories;
                 response.ExistingWorkItems = allExistingWorkItems;
                 response.NewWorkItems = allCreatedWorkItems;
+                response.WhatIf = whatIf;
             }
 
             return response;

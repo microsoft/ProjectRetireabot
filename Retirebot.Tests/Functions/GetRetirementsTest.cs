@@ -87,7 +87,7 @@ namespace Retirebot.Tests.Functions
 
             // assert - no work items should have been created
             mockWorkItemClient.Verify(
-                c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>()), Times.Never
+                c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never
             );
         }
 
@@ -110,7 +110,7 @@ namespace Retirebot.Tests.Functions
                 .Setup(c => c.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "example/repo"))
                 .ReturnsAsync(new Dictionary<string, WorkItem>());
             mockWorkItemClient
-                .Setup(c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), "example/repo", false))
+                .Setup(c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), "example/repo", false, false))
                 .ReturnsAsync(new List<(Advisory, WorkItem)>());
 
             var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
@@ -121,7 +121,7 @@ namespace Retirebot.Tests.Functions
 
             // Assert - should have tried to create work items
             mockWorkItemClient.Verify(
-                c => c.CreateBatchAsync(It.Is<List<Advisory>>(a => a.Count == 1), "example/repo", false),
+                c => c.CreateBatchAsync(It.Is<List<Advisory>>(a => a.Count == 1), "example/repo", false, false),
                 Times.Once);
         }
 
@@ -149,7 +149,7 @@ namespace Retirebot.Tests.Functions
                 });
 
             mockWorkItemClient
-                .Setup(c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), "example/repo", false))
+                .Setup(c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), "example/repo", false, false))
                 .ReturnsAsync(new List<(Advisory, WorkItem)>());
 
             var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
@@ -161,6 +161,7 @@ namespace Retirebot.Tests.Functions
                 c => c.CreateBatchAsync(
                     It.Is<List<Advisory>>(a => a.Count == 0),
                     "example/repo",
+                    false,
                     false
                 ),
                 Times.Once
