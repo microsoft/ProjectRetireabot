@@ -12,7 +12,7 @@ namespace Retirebot.Helpers.Azure
         {
             _client = client;
         }
-        public async Task<string[]> GetSubscriptionsAsync()
+        public virtual async Task<string[]> GetSubscriptionsAsync()
         {
             string uri = "/subscriptions?api-version=2022-12-01";
 
@@ -27,7 +27,7 @@ namespace Retirebot.Helpers.Azure
                 .ToArray();
         }
 
-        public async Task<QueryResult<RetirementData>> RunQueryAsync(string subscriptionId, string query)
+        public virtual async Task<QueryResult<RetirementData>> RunQueryAsync(string subscriptionId, string query)
         {
             string uri = "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01";
 
@@ -42,14 +42,15 @@ namespace Retirebot.Helpers.Azure
 
             var result = await response.Content.ReadFromJsonAsync<QueryResult<RetirementData>>();
 
-            if (result == null) {
+            if (result == null)
+            {
                 throw new InvalidOperationException("Got a null object when attempting to deserialise Azure Resource Graph Query response.");
             }
 
             return result;
         }
 
-        public async Task<Advisory> GetAdvisoryAsync(string uri)
+        public virtual async Task<Advisory> GetAdvisoryAsync(string uri)
         {
             string apiVersion = "2025-01-01";
 
@@ -66,7 +67,7 @@ namespace Retirebot.Helpers.Azure
             return result;
         }
 
-        public async Task<Dictionary<string,string>> GetManagementGroupSubscriptionsAsync(string groupId)
+        public virtual async Task<Dictionary<string, string>> GetManagementGroupSubscriptionsAsync(string groupId)
         {
             var response = await _client.GetAsync($"/providers/Microsoft.Management/managementGroups/{groupId}/descendants?api-version=2020-05-01");
             response.EnsureSuccessStatusCode();
@@ -80,7 +81,7 @@ namespace Retirebot.Helpers.Azure
 
             return result.Value
                 .Where(d => d.IsSubscription)
-                .ToDictionary(d => d.Name, d=> groupId);
+                .ToDictionary(d => d.Name, d => groupId);
         }
     }
 }

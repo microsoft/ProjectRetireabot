@@ -8,6 +8,7 @@ using Retirebot.Functions;
 using Retirebot.Helpers;
 using Retirebot.Models;
 using Retirebot.Models.Azure;
+using Retirebot.Models.HTTP;
 
 namespace Retirebot.Tests.Functions
 {
@@ -15,6 +16,74 @@ namespace Retirebot.Tests.Functions
     {
         private static IConfiguration BuildConfig(Dictionary<string, string?> settings) =>
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+
+        private static Advisory CreateAdvisory(string name = "test-advisory-1", string typeId = "type-1", string impact = "High")
+        {
+            return new Advisory
+            {
+                Id = $"/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Advisor/recommendations/{name}",
+                Name = name,
+                Type = "Microsoft.Advisor/recommendations",
+                Properties = new AdvisoryProperties
+                {
+                    Category = "HighAvailability",
+                    Impact = impact,
+                    ImpactedField = "Microsoft.Web/sites",
+                    ImpactedValue = "my-app-service",
+                    RecommendationTypeId = typeId,
+                    ShortDescription = new ShortDescription
+                    {
+                        Problem = "App Service Environment v2 retiring",
+                        Solution = "Migrate to App Service Environment v3"
+                    },
+                    ExtendedProperties = new ExtendedProperties
+                    {
+                        RetirementDate = "2025-08-31",
+                        RetirementFeatureName = "ASEv2"
+                    },
+                    ResourceMetadata = new ResourceMetadata
+                    {
+                        ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/my-app-service"
+                    }
+                }
+            };
+        }
+
+        private static (GetRetirements function, Mock<IWorkItemClient> mockWorkItem, Mock<Retirebot.Helpers.Azure.ManagementClient> mockMgmt) BuildFunction(
+            Dictionary<string, string?>? configOverrides = null)
+        {
+            var defaults = new Dictionary<string, string?>
+            {
+                [ConfigKeys.App.TargetRepository] = "owner/repo",
+                [ConfigKeys.App.WorkItemScope] = "Monolithic",
+                [ConfigKeys.App.AssignGitHubCopilot] = "false",
+                [ConfigKeys.App.CreateParentWorkItems] = "true",
+                [ConfigKeys.App.CreateChildWorkItems] = "true",
+                [ConfigKeys.App.HTTPEndpointEnable] = "true",
+                [ConfigKeys.App.HTTPEndpointOutput] = "true",
+                [ConfigKeys.App.HTTPEndpointWhatIf] = "true",
+            };
+
+            if (configOverrides != null)
+            {
+                foreach (var kvp in configOverrides)
+                    defaults[kvp.Key] = kvp.Value;
+            }
+
+            var config = new ConfigurationBuilder().AddInMemoryCollection(defaults).Build();
+            var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
+
+            var mockHttpClient = new HttpClient(new Mock<HttpMessageHandler>().Object)
+            {
+                BaseAddress = new Uri("https://management.azure.com/")
+            };
+            var mockMgmt = new Mock<Retirebot.Helpers.Azure.ManagementClient>(mockHttpClient) { CallBase = false };
+            var mockWorkItem = new Mock<IWorkItemClient>();
+
+            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, mockWorkItem.Object);
+
+            return (function, mockWorkItem, mockMgmt);
+        }
 
         private static (Retirebot.Helpers.Azure.ManagementClient client, Mock<HttpMessageHandler> handler) BuildMockManagementClient()
         {
@@ -66,29 +135,66 @@ namespace Retirebot.Tests.Functions
         }
 
         [Fact]
-        public async Task GetRetirementsAsync_NoSubscriptions_DoesNotCreateWorkItems()
+        public async Task GetRetirementsASync_NoSubscriptions_ReturnsFailure()
         {
-            var config = BuildConfig(new Dictionary<string, string?>
-            {
-                [ConfigKeys.App.TargetRepository] = "example/repo",
-                [ConfigKeys.App.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
-            });
+            var (function, mockWorkItem, mockMgmt) = BuildFunction();
+            mockMgmt.Setup(m => m.GetSubscriptionsAsync()).ReturnsAsync(Array.Empty<string>());
 
-            var (mgmtClient, handler) = BuildMockManagementClient();
+            var result = await function.GetRetirementsASync();
 
-            SetupHttpResource(handler, new { value = Array.Empty<object>() });
+            Assert.Equal(Retirebot.Models.HTTP.GetRetirementsResult.Failure, result.Result);
+            Assert.Contains("No subscriptions", result.ResultDescription);
+        }
 
-            var mockWorkItemClient = new Mock<IWorkItemClient>();
-            var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
+        [Fact]
+        public async Task GetRetirementsASync_WhatIf_DoesNotCreateRealIssues()
+        {
+            var (function, mockWorkItem, mockMgmt) = BuildFunction();
+            var advisory = CreateAdvisory();
 
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object);
+            mockMgmt.Setup(m => m.GetSubscriptionsAsync()).ReturnsAsync(new[] { "sub-1" });
+            mockMgmt.Setup(m => m.RunQueryAsync("sub-1", It.IsAny<string>()))
+                .ReturnsAsync(new QueryResult<RetirementData>
+                {
+                    Data = new List<RetirementData>() { RetirementDataFromAdvisory(advisory) },
+                    Length = 1
+                });
 
-            await sut.GetRetirementsASync();
+            mockWorkItem.Setup(m => m.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "owner/repo"))
+                .ReturnsAsync(new Dictionary<string, WorkItem>());
+            mockWorkItem.Setup(m => m.CreateBatchAsync(It.IsAny<List<Advisory>>(), "owner/repo", false, true))
+                .ReturnsAsync(new List<(Advisory, WorkItem)>
+                {
+                    (advisory, new WorkItem {Id = "", Number = 0, Title = "WhatIf Issue"})
+                });
 
-            // assert - no work items should have been created
-            mockWorkItemClient.Verify(
-                c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never
-            );
+            mockWorkItem.Setup(m => m.FindOrCreateParentAsync(It.IsAny<string>(), It.IsAny<Advisory>(), It.IsAny<Dictionary<string, List<WorkItem>>>(), "owner/repo", true))
+                .ReturnsAsync(new ParentWorkItemResult
+                {
+                    Action = ParentWorkItemAction.Created,
+                    ChildCount = 1,
+                    RecommendationTypeId = "type-1",
+                    WorkItem = new WorkItem { Id = "", Number = 0, Title = "WhatIf Parent" }
+                });
+
+            var result = await function.GetRetirementsASync(whatIf: true);
+
+            Assert.Equal(GetRetirementsResult.Success, result.Result);
+            Assert.True(result.WhatIf);
+
+            mockWorkItem.Verify(m => m.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), true), Times.Once);
+            mockWorkItem.Verify(m => m.FindOrCreateParentAsync(It.IsAny<string>(), It.IsAny<Advisory>(), It.IsAny<Dictionary<string, List<WorkItem>>>(), It.IsAny<string>(), true), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetRetirementAsync_WhatIf_ResponseFlagIsSet()
+        {
+            var (function, _, mockMgmt) = BuildFunction();
+            mockMgmt.Setup(m => m.GetSubscriptionsAsync()).ReturnsAsync(Array.Empty<string>());
+
+            var result = await function.GetRetirementsASync(whatIf: true);
+
+            Assert.True(result.WhatIf);
         }
 
         [Fact]
@@ -166,6 +272,32 @@ namespace Retirebot.Tests.Functions
                 ),
                 Times.Once
             );
+        }
+
+        private static RetirementData RetirementDataFromAdvisory(Advisory advisory)
+        {
+            return new RetirementData
+            {
+                Id = advisory.Id,
+                Name = advisory.Name,
+                Type = advisory.Type,
+                SubscriptionId = advisory.GetSubscriptionId(),
+                ResourceGroup = advisory.GetResourceGroupName(),
+                Location = "eastus",
+                ResourceId = advisory.Properties.ResourceMetadata.ResourceId,
+                ServiceID = advisory.Properties.RecommendationTypeId,
+                Impact = advisory.Properties.Impact,
+                Category = advisory.Properties.Category,
+                ImpactedField = advisory.Properties.ImpactedField,
+                ImpactedValue = advisory.Properties.ImpactedValue,
+                MaturityLevel = advisory.Properties.ExtendedProperties.MaturityLevel,
+                RecommendationOfferingId = advisory.Properties.ExtendedProperties.RecommendationOfferingId,
+                LastUpdated = advisory.Properties.LastUpdated.ToString("o"),
+                RetirementDate = advisory.Properties.ExtendedProperties.RetirementDate,
+                RetirementFeatureName = advisory.Properties.ExtendedProperties.RetirementFeatureName,
+                ShortDescriptionProblem = advisory.Properties.ShortDescription.Problem,
+                ShortDescriptionSolution = advisory.Properties.ShortDescription.Solution
+            };
         }
     }
 }

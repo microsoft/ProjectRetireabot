@@ -31,7 +31,7 @@ jobs:
 
       - name: "Run Tests"
         shell: bash
-        run: dotnet test
+        run: dotnet test --configuration Release --logger "trx;LogFileName=TestResults.trx"
       - name: "Resolve Project Dependencies Using Dotnet"
         shell: bash
         run: |
@@ -57,3 +57,8 @@ jobs:
           publish-profile: ""
           scm-do-build-during-deployment: false
           slot-name: "Production"
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: ./Retirebot.Tests/TestResults/TestResults.trx
