@@ -16,6 +16,11 @@
     {
         public const string AzureClientId = "AZURE_CLIENT_ID";
 
+        public static class AzureDevOps
+        {
+            public const string OrganisationUrl = "AzureDevOps:OrganisationUrl";
+        }
+
         public static class GitHub
         {
             public const string AppId = "GitHub:AppId";

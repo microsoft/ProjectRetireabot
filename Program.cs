@@ -79,7 +79,8 @@ switch (backend)
         builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.GitHub.WorkItemClient>();
         break;
     case WorkItemBackend.AzureDevOps:
-        throw new NotImplementedException("Azure DevOps Tracking backend has not yet been implemented.");
+        builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.AzureDevOps.WorkItemClient>();
+        break;
     default:
         throw new InvalidOperationException($"Unsupported work item backend: {backend}");
 
