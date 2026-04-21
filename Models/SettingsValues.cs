@@ -19,6 +19,10 @@
         public static class AzureDevOps
         {
             public const string OrganisationUrl = "AzureDevOps:OrganisationUrl";
+            public const string WorkItemDefaultAssignee = "AzureDevOps:WorkItemDefaultAssignee";
+            public const string WorkItemClosedState = "AzureDevOps:WorkItemClosedState";
+            public const string WorkItemOpenState = "AzureDevOps:WorkItemOpenState";
+            public const string WorkItemType = "AzureDevOps:WorkItemType";
         }
 
         public static class GitHub
