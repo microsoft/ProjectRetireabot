@@ -129,7 +129,7 @@ namespace Retirebot.Helpers.AzureDevOps
         /// Builds the full cross-repo issue reference (e.g., "owner/repo#42").
         /// If the child is in the same repo as the parent, uses short form "#42".
         /// </summary>
-        private static string GetIssueReference(Models.WorkItem childIssue, string childRepo, string parentRepo)
+        private static string GetWorkItemReference(Models.WorkItem childIssue, string childRepo, string parentRepo)
         {
             return string.Equals(childRepo, parentRepo, StringComparison.OrdinalIgnoreCase)
                 ? $"#{childIssue.Number}"
@@ -139,7 +139,7 @@ namespace Retirebot.Helpers.AzureDevOps
         /// <summary>
         /// Generates the body for the parent issue, with the description of the issue and references to the child issues.
         /// </summary>
-        private string GenerateParentIssueBody(Advisory representativeAdvisory, Dictionary<string, List<Models.WorkItem>> childIssuesByRepo, string parentRepo)
+        private string GenerateParentWorkItemBody(Advisory representativeAdvisory, Dictionary<string, List<Models.WorkItem>> childIssuesByRepo, string parentRepo)
         {
             var props = representativeAdvisory.Properties;
             var taskListLines = childIssuesByRepo
@@ -179,6 +179,38 @@ namespace Retirebot.Helpers.AzureDevOps
 ";
         }
 
+        private string GenerateWorkItemTitle(Advisory advisory)
+        {
+            return $"{advisory.Properties.ShortDescription.Problem} - {advisory.Properties.ImpactedValue}";
+        }
+
+        private string GenerateWorkItemBody(Advisory advisory)
+        {
+            var props = advisory.Properties;
+            return $@"## Azure Advisor Recommendation
+
+**Impact:** {props.Impact}
+**Category:** {props.Category}
+**Resource:** {props.ImpactedValue}
+
+### Description
+{props.ShortDescription.Problem}
+
+### Solution
+{props.ShortDescription.Solution}
+
+### Details
+- **Retirement Date:** {props.ExtendedProperties?.RetirementDate}
+- **Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}
+- **Resource ID:** {props.ResourceMetadata?.ResourceId}
+- **Last Updated:** {props.LastUpdated}
+
+### Advisory ID
+`{advisory.Name}`
+";
+        }
+
+
         /// <summary>
         /// Parses task list items from a GitHub issue body.
         /// Matches lines like: - [ ] owner/repo#123 or - [x] owner/repo#123
@@ -208,9 +240,51 @@ namespace Retirebot.Helpers.AzureDevOps
             return (references, startBlock, endBlock);
         }
 
-        public Task<List<(Advisory, Models.WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot, bool whatIf)
+        public async Task<List<(Advisory, Models.WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot, bool whatIf)
         {
-            throw new NotImplementedException();
+            SemaphoreSlim semaphore = new SemaphoreSlim(5);
+
+            var created = advisories.Select(async advisory =>
+            {
+                await semaphore.WaitAsync();
+
+                try
+                {
+                    JsonPatchDocument workItemPatch = new JsonPatchDocument
+                    {
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Title", Value = GenerateWorkItemTitle(advisory)},
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{GetAdvisoryLabel(advisory.Name)};{_advisoryLabel};{advisory.Properties.Impact.ToLower()}"},
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.State", Value = _workItemOpenState},
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateWorkItemBody(advisory)},
+                    };
+
+                    if (whatIf)
+                    {
+                        throw new NotImplementedException();
+                    }
+
+                    var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, targetRepo, _workItemType);
+
+                    return ToWorkItem(workItem);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to create work item for advisory {AdvisoryId}", advisory.Name);
+                    return null;
+                }
+            });
+
+            var results = await Task.WhenAll(created);
+
+            if (results == null)
+            {
+                return new List<(Advisory, Models.WorkItem)>();
+            }
+
+            return [.. results.Select((r, i) => (advisory: advisories[i], wi: r))
+                  .Where(p => p.wi != null)
+                  .Select(p => (p.advisory, p.wi!))];
         }
 
         public async Task<Dictionary<string, Models.WorkItem>> FindExistingByAdvisoryAsync(List<Advisory> advisories, string targetRepo)
@@ -281,7 +355,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
                     (HashSet<string> existingRefs, _, _) = ParseTaskListReferences(parsedParent.Body);
 
-                    List<string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetIssueReference(issue, kvp.Key, parentRepo))).ToList();
+                    List<string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetWorkItemReference(issue, kvp.Key, parentRepo))).ToList();
                     List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
 
                     if (newRefs.Count == 0)
@@ -362,7 +436,7 @@ namespace Retirebot.Helpers.AzureDevOps
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{parentLabel};{_advisoryParentLabel}"},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.State", Value = _workItemOpenState},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
-                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentIssueBody(representativeAdvisory, childItemsByRepo, parentRepo)},
+                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentWorkItemBody(representativeAdvisory, childItemsByRepo, parentRepo)},
                 };
 
                 int childWorkItemCount = childItemsByRepo.Values.Sum(i => i.Count);
