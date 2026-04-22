@@ -143,7 +143,7 @@ namespace Retirebot.Helpers.AzureDevOps
         {
             var props = representativeAdvisory.Properties;
             var taskListLines = childIssuesByRepo
-                .SelectMany(kvp => kvp.Value.Select(issue => $"- [ ] {GetIssueReference(issue, kvp.Key, parentRepo)}"))
+                .SelectMany(kvp => kvp.Value.Select(issue => $"- [ ] {GetWorkItemReference(issue, kvp.Key, parentRepo)}"))
                 .ToList();
 
             List<string> detailsList = new List<string>();
@@ -265,6 +265,7 @@ namespace Retirebot.Helpers.AzureDevOps
                     }
 
                     var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, targetRepo, _workItemType);
+                    _logger.LogInformation("Successfully created work item for {advisoryName}, {workItemID}", advisory.Name, workItem.Id);
 
                     return ToWorkItem(workItem);
                 }
@@ -272,6 +273,10 @@ namespace Retirebot.Helpers.AzureDevOps
                 {
                     _logger.LogError(ex, "Failed to create work item for advisory {AdvisoryId}", advisory.Name);
                     return null;
+                }
+                finally
+                {
+                    semaphore.Release();
                 }
             });
 
@@ -338,7 +343,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
             var wiql = new Wiql
             {
-                Query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{parentLabel}' OR CONTAINS '{_advisoryParentLabel}'"
+                Query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{parentLabel}' AND [System.Tags] CONTAINS '{_advisoryParentLabel}'"
             };
 
             var result = await _witClient.QueryByWiqlAsync(wiql, parentRepo);
@@ -454,8 +459,10 @@ namespace Retirebot.Helpers.AzureDevOps
                         WorkItem = CreateWhatIf(workItemPatch[0].Value.ToString()!, workItemPatch[4].Value.ToString() ?? string.Empty, [parentLabel, _advisoryParentLabel], [_workItemDefaultAssignee])
                     };
                 }
-
+                 
                 var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, parentRepo, _workItemType);
+
+                _logger.LogInformation("Successfully created parent tracking work item for {advisoryName}, {workItemID}", representativeAdvisory.Name, workItem.Id);
 
                 return new ParentWorkItemResult()
                 {
