@@ -187,27 +187,27 @@ namespace Retirebot.Helpers.AzureDevOps
         private string GenerateWorkItemBody(Advisory advisory)
         {
             var props = advisory.Properties;
-            return $@"## Azure Advisor Recommendation
+            return $@"<h2>Azure Advisor Recommendation</h2>
+<p><strong>Impact:</strong> {props.Impact}<br>
+<strong>Category:</strong> {props.Category}<br>
+<strong>Resource:</strong> {props.ImpactedValue}</p>
 
-**Impact:** {props.Impact}
-**Category:** {props.Category}
-**Resource:** {props.ImpactedValue}
+<h3>Description</h3>
+<p>{props.ShortDescription.Problem}</p>
 
-### Description
-{props.ShortDescription.Problem}
+<h3>Solution</h3>
+<p>{props.ShortDescription.Solution}</p>
 
-### Solution
-{props.ShortDescription.Solution}
+<h3>Details</h3>
+<ul>
+<li><strong>Retirement Date:</strong> {props.ExtendedProperties?.RetirementDate}</li>
+<li><strong>Retirement Feature:</strong> {props.ExtendedProperties?.RetirementFeatureName}</li>
+<li><strong>Resource ID:</strong> {props.ResourceMetadata?.ResourceId}</li>
+<li><strong>Last Updated:</strong> {props.LastUpdated}</li>
+</ul>
 
-### Details
-- **Retirement Date:** {props.ExtendedProperties?.RetirementDate}
-- **Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}
-- **Resource ID:** {props.ResourceMetadata?.ResourceId}
-- **Last Updated:** {props.LastUpdated}
-
-### Advisory ID
-`{advisory.Name}`
-";
+<h3>Advisory ID</h3>
+<code>{advisory.Name}</code>";
         }
 
 
