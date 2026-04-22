@@ -17,12 +17,13 @@ namespace Retirebot.Helpers
         {
             ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PreflightChecks");
 
-            CheckTargetRepository(config);
+
 
             switch (backend)
             {
                 case WorkItemBackend.GitHub:
                     CheckGitHubAuth(config, host, logger);
+                    CheckTargetRepository(config);
                     break;
             }
         }
