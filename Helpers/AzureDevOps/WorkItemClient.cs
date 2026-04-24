@@ -129,11 +129,9 @@ namespace Retirebot.Helpers.AzureDevOps
         /// Builds the full cross-repo issue reference (e.g., "owner/repo#42").
         /// If the child is in the same repo as the parent, uses short form "#42".
         /// </summary>
-        private static string GetWorkItemReference(Models.WorkItem childIssue, string childRepo, string parentRepo)
+        private static KeyValuePair<string, string> GetWorkItemReference(Models.WorkItem childIssue, string childRepo)
         {
-            return string.Equals(childRepo, parentRepo, StringComparison.OrdinalIgnoreCase)
-                ? $"#{childIssue.Number}"
-                : $"{childRepo}#{childIssue.Number}";
+            return new KeyValuePair<string, string>(childIssue.Id, childRepo);
         }
 
         /// <summary>
@@ -142,40 +140,34 @@ namespace Retirebot.Helpers.AzureDevOps
         private string GenerateParentWorkItemBody(Advisory representativeAdvisory, Dictionary<string, List<Models.WorkItem>> childIssuesByRepo, string parentRepo)
         {
             var props = representativeAdvisory.Properties;
-            var taskListLines = childIssuesByRepo
-                .SelectMany(kvp => kvp.Value.Select(issue => $"- [ ] {GetWorkItemReference(issue, kvp.Key, parentRepo)}"))
-                .ToList();
 
             List<string> detailsList = new List<string>();
 
             if (!String.IsNullOrEmpty(props.ExtendedProperties?.RetirementDate))
-                detailsList.Add($"**Retirement Date:** {props.ExtendedProperties?.RetirementDate}");
+                detailsList.Add($"<strong>Retirement Date:</strong> {props.ExtendedProperties?.RetirementDate}");
 
             if (!String.IsNullOrEmpty(props.ExtendedProperties?.RetirementFeatureName))
-                detailsList.Add($"**Retirement Feature:** {props.ExtendedProperties?.RetirementFeatureName}");
+                detailsList.Add($"<strong>Retirement Feature:</strong> {props.ExtendedProperties?.RetirementFeatureName}");
 
 
-            return $@"## Retirement Tracking: {props.ShortDescription.Problem}
+            return $@"<h2>Retirement Tracking: {props.ShortDescription.Problem}</h2>
 
-**Impact:** {props.Impact}
-**Category:** {props.Category}
+<p><strong>Impact:</strong> {props.Impact}<br>
+<strong>Category:</strong> {props.Category}<br>
 
 {string.Join("\n", detailsList)}
 
-### Description
-{props.ShortDescription.Problem}
+<h3>Description</h3>
+<p>{props.ShortDescription.Problem}</p>
 
-### Solution
-{props.ShortDescription.Solution}
+<h3>Solution</h3>
+<p>{props.ShortDescription.Solution}</p>
 
-### Affected Resources ({taskListLines.Count})
-{string.Join("\n", taskListLines)}
+<h3>Recommendation Type ID</h3>
+<code>{props.RecommendationTypeId}</code>
 
-### Recommendation Type ID
-`{props.RecommendationTypeId}`
-
-### Last Updated
-`{DateTime.UtcNow:r}`
+<h3>Last Updated</h3>
+<code>{DateTime.UtcNow:r}</code>
 ";
         }
 
@@ -238,6 +230,27 @@ namespace Retirebot.Helpers.AzureDevOps
             }
 
             return (references, startBlock, endBlock);
+        }
+
+        private async Task<List<string>> ParseParentChildItems(int parentId)
+        {
+            var parent = await _witClient.GetWorkItemAsync(parentId, expand: WorkItemExpand.Relations);
+
+            var childIds = parent.Relations?
+                .Where(r => r.Rel == "System.LinkTypes.Hierarchy-Forward")
+                .Select(r => int.Parse(r.Url.Split('/').Last()))
+                .ToList() ?? [];
+
+            if (childIds.Count > 0)
+            {
+                var children = await _witClient.GetWorkItemsAsync(childIds,
+                    fields: ["System.Id"]);
+                var wkiIds = children.Select(wki => wki.Id.ToString()) ?? [];
+
+                return wkiIds.ToList()!;
+            }
+
+            return [];
         }
 
         public async Task<List<(Advisory, Models.WorkItem)>> CreateBatchAsync(List<Advisory> advisories, string targetRepo, bool assignCopilot, bool whatIf)
@@ -357,15 +370,14 @@ namespace Retirebot.Helpers.AzureDevOps
                     existingParent = await _witClient.GetWorkItemAsync(wir.Id, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
                     var parsedParent = ToWorkItem(existingParent);
 
+                    var existingItems = await ParseParentChildItems(wir.Id);
 
-                    (HashSet<string> existingRefs, _, _) = ParseTaskListReferences(parsedParent.Body);
-
-                    List<string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetWorkItemReference(issue, kvp.Key, parentRepo))).ToList();
-                    List<string> newRefs = allRefs.Where(r => !existingRefs.Contains(r)).ToList();
+                    Dictionary<string,string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetWorkItemReference(issue, kvp.Key))).ToDictionary();
+                    Dictionary<string, string> newRefs = allRefs.Where(r => !existingItems.Contains(r.Key)).ToDictionary();
 
                     if (newRefs.Count == 0)
                     {
-                        _logger.LogInformation("Parent issue #{Number} for recommendation {TypeId} is already up to date", parsedParent.Number, recommendationTypeId);
+                        _logger.LogInformation("Parent work item #{Number} for recommendation {TypeId} is already up to date", parsedParent.Number, recommendationTypeId);
                         return new ParentWorkItemResult()
                         {
                             Action = ParentWorkItemAction.Unchanged,
@@ -375,21 +387,29 @@ namespace Retirebot.Helpers.AzureDevOps
                         };
                     }
 
-                    var existingTaskLines = TaskListPattern().Matches(parsedParent.Body).Select(m => m.Value.Trim()).ToList();
-                    var allTaskLines = existingTaskLines.Concat(newRefs.Select(r => $"- [ ] {r}"));
-                    string newSection = $"### Affected Resources ({allRefs.Count})\n{string.Join("\n", allTaskLines)}\n";
-
-                    string updatedBody = AffectedResourcesSectionPattern().Replace(parsedParent.Body, newSection);
-                    if (updatedBody == parsedParent.Body)
-                        updatedBody += $"\n{newSection}";
-
-                    updatedBody = LastUpdatedFormat().Replace(updatedBody, $"Last Updated\n`{DateTime.UtcNow:r}`");
-
+                    string updatedBody = LastUpdatedFormat().Replace(parsedParent.Body, $"Last Updated\n`{DateTime.UtcNow:r}`");
 
                     JsonPatchDocument workItemPatch = new JsonPatchDocument
                         {
                             new JsonPatchOperation {Operation = Operation.Replace, Path = "/fields/System.Description", Value = updatedBody},
                         };
+
+                    for (int i = 0; i < newRefs.Count; i++)
+                    {
+                        var currentItem = newRefs.ElementAt(i);
+
+                        workItemPatch.Add(new JsonPatchOperation
+                        {
+                            Operation = Operation.Add,
+                            Path = "/relations/-",
+                            Value = new
+                            {
+                                rel = "System.LinkTypes.Hierarchy-Forward",
+                                url = $"{_vssConnection.Uri}/{currentItem.Value}/ _apis/wit/workItems/{currentItem.Key}",
+                                attributes = new { comment = "Auto-linked by Retirebot" }
+                            }
+                        });
+                    }
 
                     // Reopen if it was closed, since new resources appeared
                     if (parsedParent.State == WorkItemState.Closed)
@@ -400,7 +420,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
                     if (whatIf)
                     {
-                        _logger.LogInformation("[WhatIf] Parent Issue #{Number} with {Count} (vs {ExistingCount}) new child references for recommendation {TypeId} would be updated", parsedParent.Number, newRefs.Count, existingTaskLines.Count, recommendationTypeId);
+                        _logger.LogInformation("[WhatIf] Parent Issue #{Number} with {Count} (vs {ExistingCount}) new child references for recommendation {TypeId} would be updated", parsedParent.Number, newRefs.Count, existingItems.Count, recommendationTypeId);
 
                         Models.WorkItem newWorkItem = ToWorkItem(existingParent);
 
@@ -443,6 +463,21 @@ namespace Retirebot.Helpers.AzureDevOps
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentWorkItemBody(representativeAdvisory, childItemsByRepo, parentRepo)},
                 };
+
+                childItemsByRepo.ForEach(kvp => kvp.Value.ForEach(wki =>
+                {
+                    workItemPatch.Add(new JsonPatchOperation
+                    {
+                        Operation = Operation.Add,
+                        Path = "/relations/-",
+                        Value = new
+                        {
+                            rel = "System.LinkTypes.Hierarchy-Forward",
+                            url = $"{_vssConnection.Uri}/{kvp.Key}/_apis/wit/workItems/{wki.Id}",
+                            attributes = new { comment = "Auto-linked by Retirebot" }
+                        }
+                    });
+                }));
 
                 int childWorkItemCount = childItemsByRepo.Values.Sum(i => i.Count);
 
