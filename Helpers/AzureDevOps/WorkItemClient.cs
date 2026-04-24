@@ -257,29 +257,40 @@ namespace Retirebot.Helpers.AzureDevOps
                     Query = $"SELECT [System.Id] FROM WorkItems WHERE ({string.Join(" OR ", tagClauses)})"
                 };
 
-                var result = await _witClient.QueryByWiqlAsync(wiql, targetRepo);
-
-                if (result.WorkItems.Any())
+                try
                 {
-                    var ids = result.WorkItems.Select(wi => wi.Id).ToList();
-                    var workItems = await _witClient.GetWorkItemsAsync(ids, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
+                    var result = await _witClient.QueryByWiqlAsync(wiql, targetRepo);
 
-                    foreach (var advisory in batch)
+                    if (result.WorkItems.Any())
                     {
-                        string advisoryTag = WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, advisory.Name, MaxTagLength);
+                        var ids = result.WorkItems.Select(wi => wi.Id).ToList();
+                        var workItems = await _witClient.GetWorkItemsAsync(ids, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
 
-                        var matchedWorkItem = workItems.FirstOrDefault(wi =>
+                        foreach (var advisory in batch)
                         {
-                            var tags = wi.Fields.GetValueOrDefault("System.Tags")?.ToString() ?? "";
-                            return tags.Split(";", StringSplitOptions.TrimEntries)
-                            .Any(t => t.Equals(advisoryTag, StringComparison.OrdinalIgnoreCase));
-                        });
+                            string advisoryTag = WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, advisory.Name, MaxTagLength);
 
-                        if (matchedWorkItem != null)
-                        {
-                            existingWorkItems[advisory.Name] = ToWorkItem(matchedWorkItem);
+                            var matchedWorkItem = workItems.FirstOrDefault(wi =>
+                            {
+                                var tags = wi.Fields.GetValueOrDefault("System.Tags")?.ToString() ?? "";
+                                return tags.Split(";", StringSplitOptions.TrimEntries)
+                                .Any(t => t.Equals(advisoryTag, StringComparison.OrdinalIgnoreCase));
+                            });
+
+                            if (matchedWorkItem != null)
+                            {
+                                existingWorkItems[advisory.Name] = ToWorkItem(matchedWorkItem);
+                            }
                         }
                     }
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "Failed to search for existing work items in batch.");
+                }
+                
+                // Be reasonable with the query requests
+                if (i + batchSize < advisories.Count)
+                {
+                    await Task.Delay(2000); 
                 }
             }
             return existingWorkItems;
@@ -391,7 +402,7 @@ namespace Retirebot.Helpers.AzureDevOps
                 JsonPatchDocument workItemPatch = new JsonPatchDocument
                 {
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Title", Value = $"Retirement Tracking: {representativeAdvisory.Properties.ShortDescription.Problem}"},
-                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{parentLabel};{_advisoryLabel};{_advisoryParentLabel}"},
+                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{parentLabel};{_advisoryLabel};{_advisoryParentLabel};{representativeAdvisory.Properties.Impact.ToLower()}"},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.State", Value = _workItemOpenState},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentWorkItemBody(representativeAdvisory, parentRepo)},
