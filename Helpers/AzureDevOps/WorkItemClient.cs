@@ -124,18 +124,8 @@ namespace Retirebot.Helpers.AzureDevOps
             return label;
         }
 
-
         /// <summary>
-        /// Builds the full cross-repo issue reference (e.g., "owner/repo#42").
-        /// If the child is in the same repo as the parent, uses short form "#42".
-        /// </summary>
-        private static KeyValuePair<string, string> GetWorkItemReference(Models.WorkItem childIssue, string childRepo)
-        {
-            return new KeyValuePair<string, string>(childIssue.Id, childRepo);
-        }
-
-        /// <summary>
-        /// Generates the body for the parent issue, with the description of the issue and references to the child issues.
+        /// Generates the body for the parent work item, with the description of the issue and references to the child work items.
         /// </summary>
         private string GenerateParentWorkItemBody(Advisory representativeAdvisory, Dictionary<string, List<Models.WorkItem>> childIssuesByRepo, string parentRepo)
         {
@@ -155,7 +145,7 @@ namespace Retirebot.Helpers.AzureDevOps
 <p><strong>Impact:</strong> {props.Impact}<br>
 <strong>Category:</strong> {props.Category}<br>
 
-{string.Join("\n", detailsList)}
+{string.Join("<br>", detailsList)}
 
 <h3>Description</h3>
 <p>{props.ShortDescription.Problem}</p>
@@ -200,36 +190,6 @@ namespace Retirebot.Helpers.AzureDevOps
 
 <h3>Advisory ID</h3>
 <code>{advisory.Name}</code>";
-        }
-
-
-        /// <summary>
-        /// Parses task list items from a GitHub issue body.
-        /// Matches lines like: - [ ] owner/repo#123 or - [x] owner/repo#123
-        /// </summary>
-        private (HashSet<string>, int, int) ParseTaskListReferences(string body)
-        {
-            var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (string.IsNullOrEmpty(body)) return (references, -1, -1);
-
-            int startBlock = -1;
-            int endBlock = -1;
-
-            // Matches: - [ ] owner/repo#123 or - [x] owner/repo#123 or - [ ] #123
-            var matches = TaskListPattern().Matches(body);
-            foreach (Match match in matches)
-            {
-                references.Add(match.Groups["ref"].Value);
-            }
-
-            if (matches.Count > 0)
-            {
-                startBlock = matches[0].Index;
-                var lastMatch = matches[^1];
-                endBlock = lastMatch.Index + lastMatch.Length;
-            }
-
-            return (references, startBlock, endBlock);
         }
 
         private async Task<List<string>> ParseParentChildItems(int parentId)
@@ -372,7 +332,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
                     var existingItems = await ParseParentChildItems(wir.Id);
 
-                    Dictionary<string,string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(issue => GetWorkItemReference(issue, kvp.Key))).ToDictionary();
+                    Dictionary<string,string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(wki => new KeyValuePair<string, string>(wki.Id, kvp.Key))).ToDictionary();
                     Dictionary<string, string> newRefs = allRefs.Where(r => !existingItems.Contains(r.Key)).ToDictionary();
 
                     if (newRefs.Count == 0)
@@ -415,12 +375,12 @@ namespace Retirebot.Helpers.AzureDevOps
                     if (parsedParent.State == WorkItemState.Closed)
                     {
                         workItemPatch.Add(new JsonPatchOperation { Operation = Operation.Replace, Path = "/fields/System.State", Value = _workItemOpenState });
-                        _logger.LogInformation("Reopening parent issue #{Number} — new affected resources found", parsedParent.Number);
+                        _logger.LogInformation("Reopening parent work item #{Number} — new affected resources found", parsedParent.Number);
                     }
 
                     if (whatIf)
                     {
-                        _logger.LogInformation("[WhatIf] Parent Issue #{Number} with {Count} (vs {ExistingCount}) new child references for recommendation {TypeId} would be updated", parsedParent.Number, newRefs.Count, existingItems.Count, recommendationTypeId);
+                        _logger.LogInformation("[WhatIf] Parent work item #{Number} with {Count} (vs {ExistingCount}) new child references for recommendation {TypeId} would be updated", parsedParent.Number, newRefs.Count, existingItems.Count, recommendationTypeId);
 
                         Models.WorkItem newWorkItem = ToWorkItem(existingParent);
 
@@ -513,12 +473,6 @@ namespace Retirebot.Helpers.AzureDevOps
             }
             return null;
         }
-
-        [GeneratedRegex(@"- \[[ x]{1,2}\] (?<ref>([^\s]+)?#\d+)")]
-        private static partial Regex TaskListPattern();
-
-        [GeneratedRegex(@"### Affected Resources \(\d+\)(\n+(?:- \[[ x]{1,2}\] [^\n]+\n?)+)")]
-        private static partial Regex AffectedResourcesSectionPattern();
 
         [GeneratedRegex(@"Last Updated\n`(.*)+`")]
         private static partial Regex LastUpdatedFormat();
