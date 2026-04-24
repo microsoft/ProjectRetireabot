@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Azure.Core;
 using Azure.Identity;
 using Microsoft.Extensions.Configuration;
@@ -13,6 +12,7 @@ using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
 using Retirebot.Models;
 using Retirebot.Models.Azure;
 using Retirebot.Models.HTTP;
+using System.Text.RegularExpressions;
 
 namespace Retirebot.Helpers.AzureDevOps
 {
@@ -223,6 +223,13 @@ namespace Retirebot.Helpers.AzureDevOps
 
                 try
                 {
+                    if (whatIf)
+                    {
+                        _logger.LogInformation("[WhatIf] Would create work item for advisory {AdvisoryId}: {Title}", advisory.Name, GenerateWorkItemTitle(advisory));
+
+                        return CreateWhatIf(GenerateWorkItemTitle(advisory), GenerateWorkItemBody(advisory) ?? string.Empty, [GetAdvisoryLabel(advisory.Name), _advisoryLabel, advisory.Properties.Impact.ToLower()], [_workItemDefaultAssignee]);
+                    }
+
                     JsonPatchDocument workItemPatch = new JsonPatchDocument
                     {
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Title", Value = GenerateWorkItemTitle(advisory)},
@@ -231,11 +238,6 @@ namespace Retirebot.Helpers.AzureDevOps
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateWorkItemBody(advisory)},
                     };
-
-                    if (whatIf)
-                    {
-                        throw new NotImplementedException();
-                    }
 
                     var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, targetRepo, _workItemType);
                     _logger.LogInformation("Successfully created work item for {advisoryName}, {workItemID}", advisory.Name, workItem.Id);
@@ -273,9 +275,7 @@ namespace Retirebot.Helpers.AzureDevOps
             for (int i = 0; i < advisories.Count; i += batchSize)
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
-                var tagQueries = batch.Select(a => GetAdvisoryLabel(a.Name));
-
-                var tagClauses = batch.Select(a => $"[System.Tags] CONTAINS '{GetAdvisoryLabel(a.Name)}'");
+                var tagClauses = batch.Select(a => $"[System.Tags] CONTAINS '{SantiseWiQLInput(GetAdvisoryLabel(a.Name))}'");
                 var wiql = new Wiql
                 {
                     Query = $"SELECT [System.Id] FROM WorkItems WHERE ({string.Join(" OR ", tagClauses)})"
@@ -316,7 +316,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
             var wiql = new Wiql
             {
-                Query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{parentLabel}' AND [System.Tags] CONTAINS '{_advisoryParentLabel}'"
+                Query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{SantiseWiQLInput(parentLabel)}' AND [System.Tags] CONTAINS '{SantiseWiQLInput(_advisoryParentLabel)}' AND [System.Tags] CONTAINS '{SantiseWiQLInput(_advisoryLabel)}'"
             };
 
             var result = await _witClient.QueryByWiqlAsync(wiql, parentRepo);
@@ -332,8 +332,8 @@ namespace Retirebot.Helpers.AzureDevOps
 
                     var existingItems = await ParseParentChildItems(wir.Id);
 
-                    Dictionary<string,string> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(wki => new KeyValuePair<string, string>(wki.Id, kvp.Key))).ToDictionary();
-                    Dictionary<string, string> newRefs = allRefs.Where(r => !existingItems.Contains(r.Key)).ToDictionary();
+                    List<ChildWorkItemReference> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(wki => new ChildWorkItemReference(wki.Id, kvp.Key))).ToList();
+                    List<ChildWorkItemReference> newRefs = allRefs.Where(r => !existingItems.Contains(r.WorkItemId)).ToList();
 
                     if (newRefs.Count == 0)
                     {
@@ -347,17 +347,14 @@ namespace Retirebot.Helpers.AzureDevOps
                         };
                     }
 
-                    string updatedBody = LastUpdatedFormat().Replace(parsedParent.Body, $"Last Updated\n`{DateTime.UtcNow:r}`");
+                    string updatedBody = LastUpdatedFormat().Replace(parsedParent.Body, $"<h3>Last Updated</h3>\n<code>{DateTime.UtcNow:r}</code>");
 
                     JsonPatchDocument workItemPatch = new JsonPatchDocument
                         {
                             new JsonPatchOperation {Operation = Operation.Replace, Path = "/fields/System.Description", Value = updatedBody},
                         };
 
-                    for (int i = 0; i < newRefs.Count; i++)
-                    {
-                        var currentItem = newRefs.ElementAt(i);
-
+                    foreach(var currentItem in newRefs) { 
                         workItemPatch.Add(new JsonPatchOperation
                         {
                             Operation = Operation.Add,
@@ -365,7 +362,7 @@ namespace Retirebot.Helpers.AzureDevOps
                             Value = new
                             {
                                 rel = "System.LinkTypes.Hierarchy-Forward",
-                                url = $"{_vssConnection.Uri}/{currentItem.Value}/ _apis/wit/workItems/{currentItem.Key}",
+                                url = $"{_vssConnection.Uri}/{currentItem.ProjectName}/_apis/wit/workItems/{currentItem.WorkItemId}",
                                 attributes = new { comment = "Auto-linked by Retirebot" }
                             }
                         });
@@ -418,32 +415,38 @@ namespace Retirebot.Helpers.AzureDevOps
                 JsonPatchDocument workItemPatch = new JsonPatchDocument
                 {
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Title", Value = $"Retirement Tracking: {representativeAdvisory.Properties.ShortDescription.Problem}"},
-                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{parentLabel};{_advisoryParentLabel}"},
+                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{parentLabel};{_advisoryLabel};{_advisoryParentLabel}"},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.State", Value = _workItemOpenState},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentWorkItemBody(representativeAdvisory, parentRepo)},
                 };
 
-                childItemsByRepo.ForEach(kvp => kvp.Value.ForEach(wki =>
+                foreach (var kvp in childItemsByRepo)
                 {
-                    workItemPatch.Add(new JsonPatchOperation
+                    foreach (var wki in kvp.Value)
                     {
-                        Operation = Operation.Add,
-                        Path = "/relations/-",
-                        Value = new
+                        workItemPatch.Add(new JsonPatchOperation
                         {
-                            rel = "System.LinkTypes.Hierarchy-Forward",
-                            url = $"{_vssConnection.Uri}/{kvp.Key}/_apis/wit/workItems/{wki.Id}",
-                            attributes = new { comment = "Auto-linked by Retirebot" }
-                        }
-                    });
-                }));
+                            Operation = Operation.Add,
+                            Path = "/relations/-",
+                            Value = new
+                            {
+                                rel = "System.LinkTypes.Hierarchy-Forward",
+                                url = $"{_vssConnection.Uri}/{kvp.Key}/_apis/wit/workItems/{wki.Id}",
+                                attributes = new
+                                {
+                                    comment = "Auto-linked by Retirebot"
+                                }
+                            }
+                        });
+                    }
+                }
 
                 int childWorkItemCount = childItemsByRepo.Values.Sum(i => i.Count);
 
                 if (whatIf)
                 {
-                    _logger.LogInformation("[WhatIf] Would create a new parent issue for recommendation {TypeId} with {Count} child issues",
+                    _logger.LogInformation("[WhatIf] Would create a new parent work item for recommendation {TypeId} with {Count} child work items",
                         recommendationTypeId, childWorkItemCount);
 
                     return new ParentWorkItemResult()
@@ -454,7 +457,7 @@ namespace Retirebot.Helpers.AzureDevOps
                         WorkItem = CreateWhatIf(workItemPatch[0].Value.ToString()!, workItemPatch[4].Value.ToString() ?? string.Empty, [parentLabel, _advisoryParentLabel], [_workItemDefaultAssignee])
                     };
                 }
-                 
+
                 var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, parentRepo, _workItemType);
 
                 _logger.LogInformation("Successfully created parent tracking work item for {advisoryName}, {workItemID}", representativeAdvisory.Name, workItem.Id);
@@ -474,7 +477,10 @@ namespace Retirebot.Helpers.AzureDevOps
             return null;
         }
 
-        [GeneratedRegex(@"Last Updated\n`(.*)+`")]
+        [GeneratedRegex(@"<h3>Last Updated<\/h3>\n<code>(.*)+<\/code>")]
         private static partial Regex LastUpdatedFormat();
+
+        private record ChildWorkItemReference(string ProjectName, string WorkItemId);
+        private static string SantiseWiQLInput(string variable) => variable.Replace("'", "''");
     }
 }
