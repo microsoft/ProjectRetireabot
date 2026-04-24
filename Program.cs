@@ -1,4 +1,5 @@
 using Azure.Identity;
+using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
@@ -50,6 +51,7 @@ if (keyvaultUri != null)
     Uri KeyVaultUri = new Uri(keyvaultUri);
 
     builder.Services.AddSingleton(sp => new KeyClient(KeyVaultUri, credentials));
+    builder.Services.AddSingleton(sp => new CertificateClient(KeyVaultUri, credentials));
     builder.Configuration.AddAzureKeyVault(KeyVaultUri, credentials);
 }
 
