@@ -125,9 +125,9 @@ namespace Retirebot.Helpers.AzureDevOps
         }
 
         /// <summary>
-        /// Generates the body for the parent work item, with the description of the issue and references to the child work items.
+        /// Generates the body for the parent work item, with the description of the advisory.
         /// </summary>
-        private string GenerateParentWorkItemBody(Advisory representativeAdvisory, Dictionary<string, List<Models.WorkItem>> childIssuesByRepo, string parentRepo)
+        private string GenerateParentWorkItemBody(Advisory representativeAdvisory, string parentRepo)
         {
             var props = representativeAdvisory.Properties;
 
@@ -421,7 +421,7 @@ namespace Retirebot.Helpers.AzureDevOps
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{parentLabel};{_advisoryParentLabel}"},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.State", Value = _workItemOpenState},
                     new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
-                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentWorkItemBody(representativeAdvisory, childItemsByRepo, parentRepo)},
+                    new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateParentWorkItemBody(representativeAdvisory, parentRepo)},
                 };
 
                 childItemsByRepo.ForEach(kvp => kvp.Value.ForEach(wki =>
