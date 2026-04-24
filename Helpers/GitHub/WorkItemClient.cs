@@ -69,7 +69,7 @@ namespace Retirebot.Helpers.GitHub
             for (int i = 0; i < advisories.Count; i += batchSize)
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
-                var labelQueries = batch.Select(a => GetAdvisoryLabel(a.Name));
+                var labelQueries = batch.Select(a => WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, a.Name, MaxLabelLength));
                 var searchQuery = $"repo:{targetRepo} label:{string.Join(",", labelQueries)}";
 
                 var searchRequest = new SearchIssuesRequest(searchQuery)
@@ -93,7 +93,7 @@ namespace Retirebot.Helpers.GitHub
                         if (advisoryLabel != null)
                         {
 
-                            var matchedAdvisory = batch.FirstOrDefault(a => GetAdvisoryLabel(a.Name) == advisoryLabel.Name);
+                            var matchedAdvisory = batch.FirstOrDefault(a => WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, a.Name, MaxLabelLength) == advisoryLabel.Name);
                             if (matchedAdvisory != null)
                             {
                                 existingIssues[matchedAdvisory.Name] = ToWorkItem(issue);
@@ -132,13 +132,13 @@ namespace Retirebot.Helpers.GitHub
 
                 try
                 {
-                    var newIssue = new NewIssue(GenerateIssueTitle(advisory))
+                    var newIssue = new NewIssue(WorkItemClientCommon.GenerateWorkItemTitle(advisory))
                     {
                         Body = GenerateIssueBody(advisory)
                     };
 
                     // Add labels including the advisory GUID
-                    newIssue.Labels.Add(GetAdvisoryLabel(advisory.Name));
+                    newIssue.Labels.Add(WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, advisory.Name, MaxLabelLength));
                     newIssue.Labels.Add(_advisoryLabel);
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
@@ -180,31 +180,6 @@ namespace Retirebot.Helpers.GitHub
             return [.. results.Select((r, i) => (advisory: advisories[i], issue: r))
                   .Where(p => p.issue != null)
                   .Select(p => (p.advisory, p.issue!))];
-        }
-
-        private string GetAdvisoryLabel(string advisoryName)
-        {
-            var label = $"{_advisoryLabelPrefix}{advisoryName}";
-            if (label.Length > MaxLabelLength)
-            {
-                label = label[..MaxLabelLength];
-            }
-            return label;
-        }
-
-        private string GetParentLabel(string recommendationTypeId)
-        {
-            var label = $"{_parentLabelPrefix}{recommendationTypeId}";
-            if (label.Length > MaxLabelLength)
-            {
-                label = label[..MaxLabelLength];
-            }
-            return label;
-        }
-
-        private string GenerateIssueTitle(Advisory advisory)
-        {
-            return $"{advisory.Properties.ShortDescription.Problem} - {advisory.Properties.ImpactedValue}";
         }
 
         private string GenerateIssueBody(Advisory advisory)
@@ -321,7 +296,7 @@ namespace Retirebot.Helpers.GitHub
         /// </summary>
         public async Task<ParentWorkItemResult?> FindOrCreateParentAsync(string recommendationTypeId, Advisory representativeAdvisory, Dictionary<string, List<WorkItem>> childItemsByRepo, string parentRepo, bool whatIf)
         {
-            string parentLabel = GetParentLabel(recommendationTypeId);
+            string parentLabel = WorkItemClientCommon.GenerateAdvisoryLabel(_parentLabelPrefix, recommendationTypeId, MaxLabelLength);
             string[] repoParts = parentRepo.Split("/");
             Issue? existingParent = null;
             GitHubClient? ghClient = await _credentialProvider.GetPrimaryClient();

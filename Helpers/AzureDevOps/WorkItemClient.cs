@@ -32,7 +32,7 @@ namespace Retirebot.Helpers.AzureDevOps
         private readonly string _workItemClosedState;
         private readonly string _workItemType;
 
-        private const int MaxLabelLength = 50;
+        private const int MaxTagLength = 400;
 
         public WorkItemClient(IConfiguration config, DefaultAzureCredential credential, ILoggerFactory loggerFactory)
         {
@@ -104,25 +104,6 @@ namespace Retirebot.Helpers.AzureDevOps
                 Url = null
             };
 
-        private string GetAdvisoryLabel(string advisoryName)
-        {
-            var label = $"{_advisoryLabelPrefix}{advisoryName}";
-            if (label.Length > MaxLabelLength)
-            {
-                label = label[..MaxLabelLength];
-            }
-            return label;
-        }
-
-        private string GetParentLabel(string recommendationTypeId)
-        {
-            var label = $"{_parentLabelPrefix}{recommendationTypeId}";
-            if (label.Length > MaxLabelLength)
-            {
-                label = label[..MaxLabelLength];
-            }
-            return label;
-        }
 
         /// <summary>
         /// Generates the body for the parent work item, with the description of the advisory.
@@ -159,11 +140,6 @@ namespace Retirebot.Helpers.AzureDevOps
 <h3>Last Updated</h3>
 <code>{DateTime.UtcNow:r}</code>
 ";
-        }
-
-        private string GenerateWorkItemTitle(Advisory advisory)
-        {
-            return $"{advisory.Properties.ShortDescription.Problem} - {advisory.Properties.ImpactedValue}";
         }
 
         private string GenerateWorkItemBody(Advisory advisory)
@@ -225,15 +201,15 @@ namespace Retirebot.Helpers.AzureDevOps
                 {
                     if (whatIf)
                     {
-                        _logger.LogInformation("[WhatIf] Would create work item for advisory {AdvisoryId}: {Title}", advisory.Name, GenerateWorkItemTitle(advisory));
+                        _logger.LogInformation("[WhatIf] Would create work item for advisory {AdvisoryId}: {Title}", advisory.Name, WorkItemClientCommon.GenerateWorkItemTitle(advisory));
 
-                        return CreateWhatIf(GenerateWorkItemTitle(advisory), GenerateWorkItemBody(advisory) ?? string.Empty, [GetAdvisoryLabel(advisory.Name), _advisoryLabel, advisory.Properties.Impact.ToLower()], [_workItemDefaultAssignee]);
+                        return CreateWhatIf(WorkItemClientCommon.GenerateWorkItemTitle(advisory), GenerateWorkItemBody(advisory) ?? string.Empty, [WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, advisory.Name, MaxTagLength), _advisoryLabel, advisory.Properties.Impact.ToLower()], [_workItemDefaultAssignee]);
                     }
 
                     JsonPatchDocument workItemPatch = new JsonPatchDocument
                     {
-                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Title", Value = GenerateWorkItemTitle(advisory)},
-                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{GetAdvisoryLabel(advisory.Name)};{_advisoryLabel};{advisory.Properties.Impact.ToLower()}"},
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Title", Value = WorkItemClientCommon.GenerateWorkItemTitle(advisory)},
+                        new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Tags", Value = $"{WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, advisory.Name, MaxTagLength)};{_advisoryLabel};{advisory.Properties.Impact.ToLower()}"},
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.State", Value = _workItemOpenState},
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.AssignedTo", Value = _workItemDefaultAssignee},
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateWorkItemBody(advisory)},
@@ -275,7 +251,7 @@ namespace Retirebot.Helpers.AzureDevOps
             for (int i = 0; i < advisories.Count; i += batchSize)
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
-                var tagClauses = batch.Select(a => $"[System.Tags] CONTAINS '{SantiseWiQLInput(GetAdvisoryLabel(a.Name))}'");
+                var tagClauses = batch.Select(a => $"[System.Tags] CONTAINS '{SantiseWiQLInput(WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, a.Name, MaxTagLength))}'");
                 var wiql = new Wiql
                 {
                     Query = $"SELECT [System.Id] FROM WorkItems WHERE ({string.Join(" OR ", tagClauses)})"
@@ -290,7 +266,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
                     foreach (var advisory in batch)
                     {
-                        string advisoryTag = GetAdvisoryLabel(advisory.Name);
+                        string advisoryTag = WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, advisory.Name, MaxTagLength);
 
                         var matchedWorkItem = workItems.FirstOrDefault(wi =>
                         {
@@ -311,7 +287,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
         public async Task<ParentWorkItemResult?> FindOrCreateParentAsync(string recommendationTypeId, Advisory representativeAdvisory, Dictionary<string, List<Models.WorkItem>> childItemsByRepo, string parentRepo, bool whatIf)
         {
-            string parentLabel = GetParentLabel(recommendationTypeId);
+            string parentLabel = WorkItemClientCommon.GenerateAdvisoryLabel(_parentLabelPrefix, recommendationTypeId, MaxTagLength);
             Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models.WorkItem? existingParent = null;
 
             var wiql = new Wiql
