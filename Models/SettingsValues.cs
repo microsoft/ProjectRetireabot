@@ -18,6 +18,11 @@
 
         public static class AzureDevOps
         {
+            public const string ClientId = "AzureDevOps:ClientId";
+            public const string TenantId = "AzureDevOps:TenantId";
+            public const string ClientSecret = "AzureDevOps:ClientSecret";
+            public const string CertificateId = "AzureDevOps:CertificateId";
+            public const string PAT = "AzureDevOps:PAT";
             public const string OrganisationUrl = "AzureDevOps:OrganisationUrl";
             public const string WorkItemDefaultAssignee = "AzureDevOps:WorkItemDefaultAssignee";
             public const string WorkItemClosedState = "AzureDevOps:WorkItemClosedState";
