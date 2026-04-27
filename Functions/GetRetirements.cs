@@ -244,6 +244,9 @@ namespace Retirebot.Functions
             List<WorkItem>? allExistingWorkItems = _httpEndpointOutput ? [] : null;
             List<WorkItem>? allCreatedWorkItems = _httpEndpointOutput ? [] : null;
 
+            int totalAttempted = 0;
+            int totalCreated = 0;
+
             foreach (var (repo, repoAdvisories) in advisoriesByRepo)
             {
                 _logger.LogInformation("Processing {Count} advisories for repository {Repo}", repoAdvisories.Count, repo);
@@ -255,6 +258,20 @@ namespace Retirebot.Functions
                     existingWorkItems.Count, advisoriesToCreate.Count, repo);
 
                 List<(Advisory, WorkItem)> createdWorkItems = _createChildWorkItems ? await _workItemClient.CreateBatchAsync(advisoriesToCreate, repo, _assignCopilot, whatIf) ?? [] : [];
+
+                totalAttempted += advisoriesToCreate.Count;
+                totalCreated += createdWorkItems.Count;
+
+                if (_createChildWorkItems && advisoriesToCreate.Count > 0 && createdWorkItems.Count == 0)
+                {
+                    _logger.LogError("All {Count} work item creations failed for repository {Repo}", advisoriesToCreate.Count, repo);
+                    return new GetRetirementsResponse()
+                    {
+                        Result = GetRetirementsResult.Failure,
+                        ResultDescription = $"All work item creations failed for {repo}. Check authentication and permissions.",
+                        WhatIf = whatIf
+                    };
+                }
 
                 if (_createParentWorkItems)
                 {
@@ -311,7 +328,9 @@ namespace Retirebot.Functions
                 }
             }
 
-            GetRetirementsResponse response = new GetRetirementsResponse() { Result = GetRetirementsResult.Success, ResultDescription = "Function ran with no issues." };
+            bool allItemsCreatedSuccessfully = totalAttempted == totalCreated;
+
+            GetRetirementsResponse response = new GetRetirementsResponse() { Result = allItemsCreatedSuccessfully ? GetRetirementsResult.Success : GetRetirementsResult.Failure, ResultDescription = allItemsCreatedSuccessfully ? "Function ran with no issues." : "Some work items failed to be created. Please check logs." };
 
             if (_httpEndpointOutput)
             {
