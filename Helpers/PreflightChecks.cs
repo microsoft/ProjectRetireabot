@@ -138,7 +138,12 @@ namespace Retirebot.Helpers
             foreach (var setting in labelPairs)
             {
                 if (setting.Value == null) continue;
-                
+
+                if (setting.Value.Length > 400)
+                {
+                    throw new InvalidOperationException($"{setting.Key} is over the Azure DevOps tag limit of 400 characters. Please trim or reduce the amount of characters for this tag.");
+                }
+
                 if (ADOInvalidTagPattern().IsMatch(setting.Value))
                 {
                     throw new InvalidOperationException($"{setting.Key} is equal to '{setting.Value}' which is not a valid Azure DevOps tag. Please remove any invalid characters.");
