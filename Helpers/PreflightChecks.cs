@@ -88,7 +88,22 @@ namespace Retirebot.Helpers
                 throw new InvalidOperationException("AzureDevOps:OrganisationUrl must be a valid HTTPS URL.");
             }
 
-            string orgName = uri.AbsolutePath.Trim('/').Split('/').FirstOrDefault() ?? "";
+            string orgName;
+
+            if (uri.Host.EndsWith(".visualstudio.com", StringComparison.OrdinalIgnoreCase))
+            {
+                // Legacy format: https://{org}.visualstudio.com
+                orgName = uri.Host.Split('.')[0];
+            }
+            else if (uri.Host.Equals("dev.azure.com", StringComparison.OrdinalIgnoreCase))
+            {
+                // Modern format: https://dev.azure.com/{org}
+                orgName = uri.AbsolutePath.Trim('/').Split('/').FirstOrDefault() ?? "";
+            }
+            else
+            {
+                throw new InvalidOperationException("AzureDevOps:OrganisationUrl must be a dev.azure.com or visualstudio.com URL.");
+            }
 
             if (!ADOOrganisationNamePattern().IsMatch(orgName))
             {
