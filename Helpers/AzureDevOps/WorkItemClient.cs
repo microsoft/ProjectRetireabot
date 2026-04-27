@@ -1,11 +1,8 @@
-using Azure.Core;
-using Azure.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi;
 using Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models;
 using Microsoft.VisualStudio.Services.Common;
-using Microsoft.VisualStudio.Services.OAuth;
 using Microsoft.VisualStudio.Services.WebApi;
 using Microsoft.VisualStudio.Services.WebApi.Patch;
 using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
@@ -18,8 +15,7 @@ namespace Retirebot.Helpers.AzureDevOps
 {
     public partial class WorkItemClient : IWorkItemClient
     {
-        private readonly VssConnection _vssConnection;
-        private readonly WorkItemTrackingHttpClient _witClient;
+        private readonly CredentialProvider _credentialProvider;
         private readonly ILogger _logger;
 
         private readonly string _advisoryLabel;
@@ -34,22 +30,11 @@ namespace Retirebot.Helpers.AzureDevOps
 
         private const int MaxTagLength = 400;
 
-        public WorkItemClient(IConfiguration config, DefaultAzureCredential credential, ILoggerFactory loggerFactory)
+        public WorkItemClient(IConfiguration config, CredentialProvider credentialProvider, ILoggerFactory loggerFactory)
         {
             _logger = loggerFactory.CreateLogger<WorkItemClient>();
 
-            string organisationUrl = config.GetSection(ConfigKeys.AzureDevOps.OrganisationUrl).Get<string>()
-                           ?? throw new InvalidOperationException("AzureDevOps:OrganisationUrl is not configured.");
-
-            var token = credential.GetToken(
-                new TokenRequestContext(new[] { "499b84ac-1321-427f-aa17-267ca6975798/.default" }));
-
-            _logger.LogInformation("Token acquired for Azure DevOps, expires: {Expiry}", token.ExpiresOn);
-
-            var vssCredentials = new VssOAuthAccessTokenCredential(token.Token);
-            _vssConnection = new VssConnection(new Uri(organisationUrl), vssCredentials);
-
-            _witClient = _vssConnection.GetClient<WorkItemTrackingHttpClient>();
+            _credentialProvider = credentialProvider;
 
             _advisoryLabel = config.GetSection(ConfigKeys.App.AdvisoryLabel).Get<string>() ?? "azure-advisor";
             _advisoryParentLabel = config.GetSection(ConfigKeys.App.AdvisoryParentLabel).Get<string>() ?? "tracking";
@@ -60,6 +45,12 @@ namespace Retirebot.Helpers.AzureDevOps
             _workItemOpenState = config.GetSection(ConfigKeys.AzureDevOps.WorkItemOpenState).Get<string>() ?? "New";
             _workItemClosedState = config.GetSection(ConfigKeys.AzureDevOps.WorkItemClosedState).Get<string>() ?? "Closed";
             _workItemType = config.GetSection(ConfigKeys.AzureDevOps.WorkItemType).Get<string>() ?? "Task";
+        }
+
+        private async Task<WorkItemTrackingHttpClient> GetWorkItemClient()
+        {
+            var connection = await _credentialProvider.GetConnection();
+            return connection.GetClient<WorkItemTrackingHttpClient>();
         }
 
         private Models.WorkItem ToWorkItem(Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models.WorkItem workItem)
@@ -168,9 +159,9 @@ namespace Retirebot.Helpers.AzureDevOps
 <code>{advisory.Name}</code>";
         }
 
-        private async Task<List<string>> ParseParentChildItems(int parentId)
+        private async Task<List<string>> ParseParentChildItems(int parentId, WorkItemTrackingHttpClient workItemClient)
         {
-            var parent = await _witClient.GetWorkItemAsync(parentId, expand: WorkItemExpand.Relations);
+            var parent = await workItemClient.GetWorkItemAsync(parentId, expand: WorkItemExpand.Relations);
 
             var childIds = parent.Relations?
                 .Where(r => r.Rel == "System.LinkTypes.Hierarchy-Forward")
@@ -179,7 +170,7 @@ namespace Retirebot.Helpers.AzureDevOps
 
             if (childIds.Count > 0)
             {
-                var children = await _witClient.GetWorkItemsAsync(childIds,
+                var children = await workItemClient.GetWorkItemsAsync(childIds,
                     fields: ["System.Id"]);
                 var wkiIds = children.Select(wki => wki.Id.ToString()) ?? [];
 
@@ -196,6 +187,8 @@ namespace Retirebot.Helpers.AzureDevOps
             var created = advisories.Select(async advisory =>
             {
                 await semaphore.WaitAsync();
+
+                var workItemClient = await GetWorkItemClient();
 
                 try
                 {
@@ -215,7 +208,7 @@ namespace Retirebot.Helpers.AzureDevOps
                         new JsonPatchOperation {Operation = Operation.Add, Path = "/fields/System.Description", Value = GenerateWorkItemBody(advisory)},
                     };
 
-                    var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, targetRepo, _workItemType);
+                    var workItem = await workItemClient.CreateWorkItemAsync(workItemPatch, targetRepo, _workItemType);
                     _logger.LogInformation("Successfully created work item for {advisoryName}, {workItemID}", advisory.Name, workItem.Id);
 
                     return ToWorkItem(workItem);
@@ -248,10 +241,12 @@ namespace Retirebot.Helpers.AzureDevOps
             Dictionary<string, Models.WorkItem> existingWorkItems = new Dictionary<string, Models.WorkItem>();
             const int batchSize = 5;
 
+            var workItemClient = await GetWorkItemClient();
+
             for (int i = 0; i < advisories.Count; i += batchSize)
             {
                 var batch = advisories.Skip(i).Take(batchSize).ToList();
-                var tagClauses = batch.Select(a => $"[System.Tags] CONTAINS '{SantiseWiQLInput(WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, a.Name, MaxTagLength))}'");
+                var tagClauses = batch.Select(a => $"[System.Tags] CONTAINS '{SanitiseWiQLInput(WorkItemClientCommon.GenerateAdvisoryLabel(_advisoryLabelPrefix, a.Name, MaxTagLength))}'");
                 var wiql = new Wiql
                 {
                     Query = $"SELECT [System.Id] FROM WorkItems WHERE ({string.Join(" OR ", tagClauses)})"
@@ -259,12 +254,12 @@ namespace Retirebot.Helpers.AzureDevOps
 
                 try
                 {
-                    var result = await _witClient.QueryByWiqlAsync(wiql, targetRepo);
+                    var result = await workItemClient.QueryByWiqlAsync(wiql, targetRepo);
 
                     if (result.WorkItems.Any())
                     {
                         var ids = result.WorkItems.Select(wi => wi.Id).ToList();
-                        var workItems = await _witClient.GetWorkItemsAsync(ids, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
+                        var workItems = await workItemClient.GetWorkItemsAsync(ids, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
 
                         foreach (var advisory in batch)
                         {
@@ -301,12 +296,14 @@ namespace Retirebot.Helpers.AzureDevOps
             string parentLabel = WorkItemClientCommon.GenerateAdvisoryLabel(_parentLabelPrefix, recommendationTypeId, MaxTagLength);
             Microsoft.TeamFoundation.WorkItemTracking.WebApi.Models.WorkItem? existingParent = null;
 
+            var workItemClient = await GetWorkItemClient();
+
             var wiql = new Wiql
             {
-                Query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{SantiseWiQLInput(parentLabel)}' AND [System.Tags] CONTAINS '{SantiseWiQLInput(_advisoryParentLabel)}' AND [System.Tags] CONTAINS '{SantiseWiQLInput(_advisoryLabel)}'"
+                Query = $"SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '{SanitiseWiQLInput(parentLabel)}' AND [System.Tags] CONTAINS '{SanitiseWiQLInput(_advisoryParentLabel)}' AND [System.Tags] CONTAINS '{SanitiseWiQLInput(_advisoryLabel)}'"
             };
 
-            var result = await _witClient.QueryByWiqlAsync(wiql, parentRepo);
+            var result = await workItemClient.QueryByWiqlAsync(wiql, parentRepo);
 
             if (result.WorkItems.Any())
             {
@@ -314,12 +311,12 @@ namespace Retirebot.Helpers.AzureDevOps
 
                 if (wir != null)
                 {
-                    existingParent = await _witClient.GetWorkItemAsync(wir.Id, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
+                    existingParent = await workItemClient.GetWorkItemAsync(wir.Id, fields: ["System.Id", "System.Title", "System.Tags", "System.State", "System.Description", "System.AssignedTo"]);
                     var parsedParent = ToWorkItem(existingParent);
 
-                    var existingItems = await ParseParentChildItems(wir.Id);
+                    var existingItems = await ParseParentChildItems(wir.Id, workItemClient);
 
-                    List<ChildWorkItemReference> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(wki => new ChildWorkItemReference(wki.Id, kvp.Key))).ToList();
+                    List<ChildWorkItemReference> allRefs = childItemsByRepo.SelectMany(kvp => kvp.Value.Select(wki => new ChildWorkItemReference(kvp.Key, wki.Id))).ToList();
                     List<ChildWorkItemReference> newRefs = allRefs.Where(r => !existingItems.Contains(r.WorkItemId)).ToList();
 
                     if (newRefs.Count == 0)
@@ -349,7 +346,7 @@ namespace Retirebot.Helpers.AzureDevOps
                             Value = new
                             {
                                 rel = "System.LinkTypes.Hierarchy-Forward",
-                                url = $"{_vssConnection.Uri}/{currentItem.ProjectName}/_apis/wit/workItems/{currentItem.WorkItemId}",
+                                url = $"{_credentialProvider.GetConnectionUri()}/{currentItem.ProjectName}/_apis/wit/workItems/{currentItem.WorkItemId}",
                                 attributes = new { comment = "Auto-linked by Retirebot" }
                             }
                         });
@@ -381,7 +378,7 @@ namespace Retirebot.Helpers.AzureDevOps
                         };
                     }
 
-                    var updated = await _witClient.UpdateWorkItemAsync(workItemPatch, int.Parse(parsedParent.Id));
+                    var updated = await workItemClient.UpdateWorkItemAsync(workItemPatch, int.Parse(parsedParent.Id));
 
                     return new ParentWorkItemResult()
                     {
@@ -419,7 +416,7 @@ namespace Retirebot.Helpers.AzureDevOps
                             Value = new
                             {
                                 rel = "System.LinkTypes.Hierarchy-Forward",
-                                url = $"{_vssConnection.Uri}/{kvp.Key}/_apis/wit/workItems/{wki.Id}",
+                                url = $"{_credentialProvider.GetConnectionUri()}/{kvp.Key}/_apis/wit/workItems/{wki.Id}",
                                 attributes = new
                                 {
                                     comment = "Auto-linked by Retirebot"
@@ -445,7 +442,7 @@ namespace Retirebot.Helpers.AzureDevOps
                     };
                 }
 
-                var workItem = await _witClient.CreateWorkItemAsync(workItemPatch, parentRepo, _workItemType);
+                var workItem = await workItemClient.CreateWorkItemAsync(workItemPatch, parentRepo, _workItemType);
 
                 _logger.LogInformation("Successfully created parent tracking work item for {advisoryName}, {workItemID}", representativeAdvisory.Name, workItem.Id);
 
@@ -468,6 +465,6 @@ namespace Retirebot.Helpers.AzureDevOps
         private static partial Regex LastUpdatedFormat();
 
         private record ChildWorkItemReference(string ProjectName, string WorkItemId);
-        private static string SantiseWiQLInput(string variable) => variable.Replace("'", "''");
+        private static string SanitiseWiQLInput(string variable) => variable.Replace("'", "''");
     }
 }

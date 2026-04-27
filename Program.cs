@@ -81,6 +81,8 @@ switch (backend)
         builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.GitHub.WorkItemClient>();
         break;
     case WorkItemBackend.AzureDevOps:
+        builder.Services.AddSingleton<Retirebot.Helpers.AzureDevOps.AuthModeService>();
+        builder.Services.AddSingleton<Retirebot.Helpers.AzureDevOps.CredentialProvider>();
         builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.AzureDevOps.WorkItemClient>();
         break;
     default:
