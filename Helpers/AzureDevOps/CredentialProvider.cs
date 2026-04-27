@@ -8,6 +8,7 @@ using Microsoft.VisualStudio.Services.OAuth;
 using Microsoft.VisualStudio.Services.WebApi;
 using Retirebot.Models;
 using Retirebot.Models.AzureDevOps;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Retirebot.Helpers.AzureDevOps
 {
@@ -16,6 +17,7 @@ namespace Retirebot.Helpers.AzureDevOps
         private VssConnection? _connection;
         private VssCredentials? _credentials;
         private TokenCredential? _tokenCredentials;
+        private Uri? _connectionUri;
 
         private DateTimeOffset _tokenExpiry = DateTimeOffset.MinValue;
 
@@ -35,7 +37,7 @@ namespace Retirebot.Helpers.AzureDevOps
             _certClient = certClient;
             _tokenCredentials = _authModeSrv.GetAuthMode() switch
             {
-                AuthMode.Certificate => CreateCredentials(tenantId: _authModeSrv.GetTenantId(), clientId: _authModeSrv.GetClientId(), certificateId: _authModeSrv.GetCertificateId()),
+                AuthMode.Certificate => CreateCertificateCredentials().Result,
                 AuthMode.ClientSecret => new ClientSecretCredential(tenantId: _authModeSrv.GetTenantId(), clientId: _authModeSrv.GetClientId(), clientSecret: _authModeSrv.GetClientSecret()),
                 AuthMode.ManagedIdentity => new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = _authModeSrv.GetClientId() }),
                 AuthMode.BuiltIn => credentials,
@@ -44,15 +46,18 @@ namespace Retirebot.Helpers.AzureDevOps
             };
         }
 
-        private static TokenCredential CreateCredentials(string? tenantId, string? clientId, string? certificateId)
+        private async Task<TokenCredential> CreateCertificateCredentials()
         {
-            throw new NotImplementedException("Certificate Credentials not implemented yet");
+            X509Certificate2 cert = await _certClient.DownloadCertificateAsync(_authModeSrv.GetCertificateId());
+
+            return new ClientCertificateCredential(_authModeSrv.GetTenantId(), _authModeSrv.GetClientId(), cert);
         }
 
         public VssCredentials CreateCredentials()
         {
             if (_authModeSrv.GetAuthMode() == AuthMode.PAT)
             {
+                _tokenExpiry = DateTimeOffset.MaxValue; // PATs don't create "credentials" that expire like oauth
                 return new VssBasicCredential("", _authModeSrv.GetPAT());
             }
 
@@ -65,19 +70,22 @@ namespace Retirebot.Helpers.AzureDevOps
             return new VssOAuthAccessTokenCredential(token.Token);
         }
 
-        public async Task<VssConnection?> GetConnection()
+        public async Task<VssConnection> GetConnection()
         {
-            if (DateTimeOffset.UtcNow >= _tokenExpiry.AddMinutes(-5))
+            if (DateTimeOffset.UtcNow >= _tokenExpiry)
             {
                 await RefreshTokenAsync();
             }
-            return _connection;
+            return _connection!;
+        }
+
+        public Uri GetConnectionUri()
+        {
+            return _connectionUri ?? new Uri(_organisationUrl);
         }
 
         private async Task RefreshTokenAsync()
         {
-            if (_tokenCredentials == null) return;
-
             await _refreshLock.WaitAsync();
             try
             {
@@ -87,6 +95,7 @@ namespace Retirebot.Helpers.AzureDevOps
                 
                 _credentials = CreateCredentials();
                 _connection = new VssConnection(new Uri(_organisationUrl), _credentials);
+                _connectionUri = _connection.Uri;
             }
             finally
             {
