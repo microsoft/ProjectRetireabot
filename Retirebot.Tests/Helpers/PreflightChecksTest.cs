@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+                                                                                                                                                                                               using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,7 +16,7 @@ namespace Retirebot.Tests.Helpers
         [InlineData("owner/repo")]
         [InlineData("my-org/my-repo.name")]
         [InlineData("ZanyLeonic/RetireBot")]
-        public void CheckTargetRepository_ValidRepo_DoesNotThrow(string repo)
+        public void CheckTargetRepository_ValidGitHubRepository_DoesNotThrow(string repo)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
@@ -32,7 +32,7 @@ namespace Retirebot.Tests.Helpers
         [InlineData("noslash")]
         [InlineData("owner/repo/extra")]
         [InlineData("owner/ repo")]
-        public void PreflightChecks_TestInvalidRepository(string repo)
+        public void CheckTargetRepository_InvalidGitHubRepository_Throws(string repo)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
@@ -41,6 +41,37 @@ namespace Retirebot.Tests.Helpers
 
             Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckTargetRepository(config));
         }
+
+        [Theory]
+        [InlineData("RetireBot")]
+        [InlineData("My-Retirement-Repo")]
+        [InlineData("Another_repository")]
+        public void CheckADOProjectName_ValidADOProjectName_DoesNotThrow(string repo)
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.App.TargetRepository] = repo
+            });
+            var exception = Record.Exception(() => PreflightChecks.CheckADOProjectName(config));
+            Assert.Null(exception);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("web.config")]
+        [InlineData("A+Totally+v@lid+repo")]
+        [InlineData("owner/repo")]
+        public void CheckADOProjectName_InvalidADOProjectName_Throws(string repo)
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.App.TargetRepository] = repo
+            });
+
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckADOProjectName(config));
+        }
+
 
         [Fact]
         public void CheckGitHubAuth_NoCredentials_Throws()
