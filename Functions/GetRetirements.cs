@@ -227,12 +227,21 @@ namespace Retirebot.Functions
             {
                 QueryResult<RetirementData> data = await _managementClient.RunQueryAsync(sub, _advisoryQuery);
 
+                _logger.LogInformation("Subscription {SubscriptionId}: found {Count} retirement advisories", sub, data.Length);
+
                 for (int i = 0; i < data.Length; i++)
                 {
                     advisories.Add(data.Data[i].ToAdvisory());
                 }
             }
 
+            if (advisories.Count == 0)
+            {
+                _logger.LogInformation("No retirement advisories found. Nothing to process.");
+                return new GetRetirementsResponse() { Result = GetRetirementsResult.Success, ResultDescription = "No retirement advisories found.", WhatIf = whatIf };
+            }
+
+            _logger.LogInformation("Found {Total} retirement advisories across {SubCount} subscription(s)", advisories.Count, subs.Length);
             Dictionary<string, List<Advisory>> advisoriesByRepo = advisories.GroupBy(GetRepositoryForAdvisory).ToDictionary(g => g.Key, g => g.ToList());
 
             // RecommendationTypeId -> (repo -> list of child work items)
