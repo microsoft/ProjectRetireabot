@@ -41,6 +41,38 @@ param gitHubPrivateKeyId string = ''
 @description('The path of the private key to be stored in the KeyVault for the GitHub App')
 param gitHubPrivateKeyPath string = ''
 
+@description('The URL of the Azure DevOps organisation (e.g. https://dev.azure.com/myorg)')
+param adoOrganisationUrl string = ''
+
+@secure()
+@description('The PAT that allows EverGreen to interact with your Azure DevOps organisation.')
+param adoPAT string = ''
+
+@description('The client ID of the app registration used to authenticate with Azure DevOps')
+param adoClientId string = ''
+
+@description('The tenant ID of the app registration used to authenticate with Azure DevOps')
+param adoTenantId string = ''
+
+@secure()
+@description('The client secret of the app registration used to authenticate with Azure DevOps')
+param adoClientSecret string = ''
+
+@description('The ID the certificate should be stored as in the KeyVault for Azure DevOps certificate auth')
+param adoCertificateId string = ''
+
+@description('(Optional) The default assignee for work items created by EverGreen in Azure DevOps')
+param adoWorkItemDefaultAssignee string = ''
+
+@description('(Optional) The state to use when opening work items in Azure DevOps. Default: New')
+param adoWorkItemOpenState string = ''
+
+@description('(Optional) The state to use when closing work items in Azure DevOps. Default: Closed')
+param adoWorkItemClosedState string = ''
+
+@description('(Optional) The work item type to create in Azure DevOps. Default: Task')
+param adoWorkItemType string = ''
+
 @description('Target repository to create work items on from advisories')
 param targetRepository string = ''
 
@@ -95,6 +127,9 @@ var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
 var storageTableDataContributorId = '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 var monitoringMetricsPublisherId = '3913510d-42f4-4e42-8a64-420c390055eb'
+
+var keyvaultCertificateUserId = 'db79e9a7-68ee-4b58-9aeb-b90e7c24fcba'
+var keyvaultCryptoUserId = '12338af0-0e69-4776-bea7-57ae8d297424'
 var keyvaultSecretsUserId = '4633458b-17de-408a-b874-0445c86b69e6'
 
 var deploymentSuffix = toLower(trim(replace(
@@ -123,8 +158,14 @@ var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 
   ? fail('To use GitHub App authentication, you need to populate all required fields')
   : null
 
-// temporary
-var gitHubOnly = workItemBackend != 'GitHub' ? fail('Only GitHub WorkItem Backend is supported currently') : null
+var adoCredentialValidation = empty(adoPAT) && empty(adoClientId) && workItemBackend == 'AzureDevOps'
+  ? fail('You must provide at least one way of authenticating with Azure DevOps (PAT, or ClientId for managed identity/client secret/certificate auth)')
+  : null
+
+var adoOrganisationUrlValidation = empty(adoOrganisationUrl) && workItemBackend == 'AzureDevOps'
+  ? fail('You must provide the Azure DevOps organisation URL when using the AzureDevOps backend')
+  : null
+
 var issueCheck = !createChildWorkItems && !createParentWorkItems
   ? fail('You need at least one type of work item to be created when an advisory is found.')
   : null
@@ -152,9 +193,25 @@ resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
 
 resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(gitHubPAT) && workItemBackend == 'GitHub') {
   parent: vault
-  name: 'GithubPAT'
+  name: 'Github--PAT'
   properties: {
     value: gitHubPAT
+  }
+}
+
+resource adoPATSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(adoPAT) && workItemBackend == 'AzureDevOps') {
+  parent: vault
+  name: 'AzureDevOps--PAT'
+  properties: {
+    value: adoPAT
+  }
+}
+
+resource adoClientSecretSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(adoClientSecret) && workItemBackend == 'AzureDevOps') {
+  parent: vault
+  name: 'AzureDevOps--ClientSecret'
+  properties: {
+    value: adoClientSecret
   }
 }
 
@@ -336,6 +393,26 @@ resource roleAssignmentKeyVaultReader 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
+resource roleAssignmentKeyVaultCertificate 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (workItemBackend == 'AzureDevOps' && !empty(adoCertificateId)) {
+  name: guid(subscription().id, vault.id, userAssignedIdentity.id, 'Key Vault Certificate User')
+  scope: vault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyvaultCertificateUserId)
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource roleAssignmentKeyVaultCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (workItemBackend == 'GitHub' && gitHubParamCount == 4) {
+  name: guid(subscription().id, vault.id, userAssignedIdentity.id, 'Key Vault Crypto User')
+  scope: vault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyvaultCryptoUserId)
+    principalId: userAssignedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 var functionServerFarmResourceName = 'asp-${deploymentSuffix}'
 module serverfarm 'br/public:avm/res/web/serverfarm:0.7.0' = {
   name: take('avm.res.web.serverfarm.${functionServerFarmResourceName}', 64)
@@ -506,7 +583,27 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           ? []
           : [
               { name: 'App__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }
-            ]
+            ],
+        workItemBackend != 'AzureDevOps'
+          ? []
+          : union(
+              [
+                { name: 'AzureDevOps__OrganisationUrl', value: adoOrganisationUrl }
+              ],
+              empty(adoClientId) ? [] : [{ name: 'AzureDevOps__ClientId', value: adoClientId }],
+              empty(adoTenantId) ? [] : [{ name: 'AzureDevOps__TenantId', value: adoTenantId }],
+              empty(adoCertificateId) ? [] : [{ name: 'AzureDevOps__CertificateId', value: adoCertificateId }],
+              empty(adoWorkItemDefaultAssignee)
+                ? []
+                : [{ name: 'AzureDevOps__WorkItemDefaultAssignee', value: adoWorkItemDefaultAssignee }],
+              empty(adoWorkItemOpenState)
+                ? []
+                : [{ name: 'AzureDevOps__WorkItemOpenState', value: adoWorkItemOpenState }],
+              empty(adoWorkItemClosedState)
+                ? []
+                : [{ name: 'AzureDevOps__WorkItemClosedState', value: adoWorkItemClosedState }],
+              empty(adoWorkItemType) ? [] : [{ name: 'AzureDevOps__WorkItemType', value: adoWorkItemType }]
+            )
       )
     }
     diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId }]
