@@ -48,7 +48,11 @@ namespace Retirebot.Helpers.AzureDevOps
 
         private async Task<TokenCredential> CreateCertificateCredentials()
         {
-            X509Certificate2 cert = await _certClient.DownloadCertificateAsync(_authModeSrv.GetCertificateId());
+            var options = new DownloadCertificateOptions(_authModeSrv.GetCertificateId()!)
+            {
+                KeyStorageFlags = X509KeyStorageFlags.MachineKeySet
+            };
+            X509Certificate2 cert = await _certClient.DownloadCertificateAsync(options);
 
             return new ClientCertificateCredential(_authModeSrv.GetTenantId(), _authModeSrv.GetClientId(), cert);
         }
@@ -64,7 +68,7 @@ namespace Retirebot.Helpers.AzureDevOps
             var token = _tokenCredentials!.GetToken(new TokenRequestContext(new[] { "499b84ac-1321-427f-aa17-267ca6975798/.default" }), default);
 
             _logger.LogInformation("Token acquired for Azure DevOps, expires: {Expiry}", token.ExpiresOn);
-            
+
             _tokenExpiry = token.ExpiresOn;
 
             return new VssOAuthAccessTokenCredential(token.Token);
@@ -92,7 +96,7 @@ namespace Retirebot.Helpers.AzureDevOps
                 if (DateTimeOffset.UtcNow < _tokenExpiry) return;
 
                 _logger.LogInformation("Refreshing Azure DevOps Connection");
-                
+
                 _credentials = CreateCredentials();
                 _connection = new VssConnection(new Uri(_organisationUrl), _credentials);
                 _connectionUri = _connection.Uri;
