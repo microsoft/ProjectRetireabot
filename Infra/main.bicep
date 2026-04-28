@@ -61,6 +61,9 @@ param adoClientSecret string = ''
 @description('The ID the certificate should be stored as in the KeyVault for Azure DevOps certificate auth')
 param adoCertificateId string = ''
 
+@description('The path of the certificate file (PFX/PEM) to be imported into the KeyVault for Azure DevOps certificate auth')
+param adoCertificatePath string = ''
+
 @description('(Optional) The default assignee for work items created by EverGreen in Azure DevOps')
 param adoWorkItemDefaultAssignee string = ''
 
@@ -617,3 +620,5 @@ output WORK_ITEM_BACKEND string = workItemBackend
 output GITHUB_PRIVATE_KEY_ID string = gitHubParamCount == 4 ? gitHubPrivateKeyId : ''
 output GITHUB_PRIVATE_KEY_PATH string = gitHubParamCount == 4 ? gitHubPrivateKeyPath : ''
 output AZURE_KEY_VAULT_NAME string = vault.name
+output ADO_CERTIFICATE_ID string = !empty(adoCertificateId) ? adoCertificateId : ''
+output ADO_CERTIFICATE_PATH string = !empty(adoCertificatePath) ? adoCertificatePath : ''
