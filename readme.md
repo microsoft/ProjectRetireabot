@@ -29,8 +29,8 @@ There are some key parameters you need to specify:
 | Name                         | Required | Description                                                                                                                                                              |
 | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | location                     | `true`   | The location where the resources are deployed                                                                                                                            |
-| targetRepository<sub>1</sub> | `true`   | Target GitHub Repository to create issues on from advisories                                                                                                             |
-| workItemBackend              | `true`   | What work item backend EverGreen should use to create work items in (Valid options: 'GitHub')                                                                            |
+| targetRepository<sub>1</sub> | `true`   | Target project or repository to create work items on from advisories                                                                                                     |
+| workItemBackend              | `true`   | What work item backend EverGreen should use to create work items in (Valid options: 'GitHub', 'AzureDevOps')                                                             |
 | targetResourceGroup          | `false`  | The resource group EverGreen should create issues for, leave blank any resource group                                                                                    |
 | advisoryLabel                | `false`  | What label should be attached to all work items to identify it was created by EverGreen. Default: advisor                                                                |
 | advisoryParentLabel          | `false`  | What label should be attached to parent work items to identify them. Default: tracking                                                                                   |
@@ -70,3 +70,25 @@ When `workItemBackend` is set to `GitHub`, you have some additional properties y
 Note: A deployment can have both a PAT and App Registration defined, the app with run in a 'Hybrid' mode, where PAT is used a secondary method to interact with GitHub.
 
 Once you have configured EverGreen with ensure your parameters file is called `main.parameters.json`, and run `azd up` at the root of the project directory, which it will then provision the architecture and deploy the application.
+
+### Azure DevOps
+
+When `workItemBackend` is set to `AzureDevOps`, you have some additional properties to configure how RetireBot interacts with ADO.
+
+| Name                       | Required            | Description                                                                                                   |
+| -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| adoOrganisationUrl         | `true`              | URL of the Azure DevOps Organisation                                                                          |
+| adoPAT                     | `false`             | The PAT that allows EverGreen to interact with your Azure DevOps organisation                                 |
+| adoClientId                | `false`             | The client ID of the app registration used to authenticate with Azure DevOps                                  |
+| adoTenantId                | `false`             | The tenant ID of the app registration used to authenticate with Azure DevOps                                  |
+| adoClientSecret            | `false`             | The client secret of the app registration used to authenticate with Azure DevOps                              |
+| adoCertificateId           | `false`             | The ID the certificate should be stored as in the KeyVault for Azure DevOps certificate auth                  |
+| adoCertificatePath         | `false`             | The path of the certificate file (PFX/PEM) to be imported into the KeyVault for Azure DevOps certificate auth |
+| adoWorkItemDefaultAssignee | `false`<sub>1</sub> | (Optional) The default assignee for work items created by EverGreen in Azure DevOps                           |
+| adoWorkItemOpenState       | `false`<sub>1</sub> | (Optional) The state to use when opening work items in Azure DevOps. Default: New                             |
+| adoWorkItemClosedState     | `false`<sub>1</sub> | (Optional) The state to use when closing work items in Azure DevOps. Default: Closed                          |
+| adoWorkItemType            | `false`<sub>1</sub> | (Optional) The work item type to create in Azure DevOps. Default: Task                                        |
+
+<sub>1</sub> Defaults of these values are set to the "Agile" Process. If you are using a different process for your project, you need to set these values to match, or work item creation will fail.
+
+If no authentication method is specified here (via Managed Identity, Certificate, Client Secret, or PAT), the Azure DevOps connector with use the associated Managed Identity used by the function app.
