@@ -1,7 +1,7 @@
 targetScope = 'resourceGroup'
 
-metadata name = 'Azure Evergreen'
-metadata description = '''This module contains all the components needed to deploy Azure Evergreen onto your subscription.
+metadata name = 'Azure Retirebot'
+metadata description = '''This module contains all the components needed to deploy Azure Retirebot onto your subscription.
 
 >**Note:** This module is currently considered a Proof-Of-Concept. Please review the module and its functionality to see if it matches your and or your customer's use case.
 '''
@@ -22,11 +22,11 @@ param location string
   'GitHub'
   'AzureDevOps'
 ])
-@description('What work item backend EverGreen should use to create work items in')
+@description('What work item backend RetireBot should use to create work items in')
 param workItemBackend string = 'GitHub'
 
 @secure()
-@description('The PAT that allows EverGreen to interact with your GitHub repository.')
+@description('The PAT that allows RetireBot to interact with your GitHub repository.')
 param gitHubPAT string = ''
 
 @description('App Id of the registered GitHub App')
@@ -45,7 +45,7 @@ param gitHubPrivateKeyPath string = ''
 param adoOrganisationUrl string = ''
 
 @secure()
-@description('The PAT that allows EverGreen to interact with your Azure DevOps organisation.')
+@description('The PAT that allows RetireBot to interact with your Azure DevOps organisation.')
 param adoPAT string = ''
 
 @description('The client ID of the app registration used to authenticate with Azure DevOps')
@@ -64,7 +64,7 @@ param adoCertificateId string = ''
 @description('The path of the certificate file (PFX/PEM) to be imported into the KeyVault for Azure DevOps certificate auth')
 param adoCertificatePath string = ''
 
-@description('(Optional) The default assignee for work items created by EverGreen in Azure DevOps')
+@description('(Optional) The default assignee for work items created by RetireBot in Azure DevOps')
 param adoWorkItemDefaultAssignee string = ''
 
 @description('(Optional) The state to use when opening work items in Azure DevOps. Default: New')
@@ -79,10 +79,10 @@ param adoWorkItemType string = ''
 @description('Target repository to create work items on from advisories')
 param targetRepository string = ''
 
-@description('(Optional) The resource group EverGreen should create issues for, leave blank any resource group')
+@description('(Optional) The resource group RetireBot should create issues for, leave blank any resource group')
 param targetResourceGroup string = ''
 
-@description('(Optional) What label should be attached to all work items to identify it was created by EverGreen. Default: advisor')
+@description('(Optional) What label should be attached to all work items to identify it was created by RetireBot. Default: advisor')
 param advisoryLabel string = ''
 
 @description('(Optional) What label should be attached to parent work items to identify them. Default: tracking')
@@ -115,7 +115,7 @@ param httpEndpointOutput bool = false
 @description('(Optional) Whether the manual HTTP endpoint should allow users to run dry-runs. Default false')
 param httpEndpointWhatIf bool = false
 
-@description('(Optional) Whether GitHub CoPilot should be assigned to issues created by EverGreen')
+@description('(Optional) Whether GitHub CoPilot should be assigned to issues created by RetireBot')
 param gitHubCoPilotAssign bool = false
 
 @allowed(['monolithic', 'perResourceGroup'])
@@ -611,7 +611,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
     }
     diagnosticSettings: [{ workspaceResourceId: logAnalyticsWS!.outputs.resourceId }]
     tags: {
-      'azd-service-name': 'evergreen'
+      'azd-service-name': 'retirebot'
     }
   }
 }

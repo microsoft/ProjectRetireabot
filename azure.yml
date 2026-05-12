@@ -1,8 +1,8 @@
-name: azure-evergreen
+name: azure-retirebot
 metadata:
-  template: azure-evergreen@1.0
+  template: azure-retirebot@1.0
 services:
-  evergreen:
+  retirebot:
     project: .
     language: dotnet
     host: function
