@@ -3,17 +3,17 @@ using Microsoft.AspNetCore.Mvc.RazorPages.Infrastructure;
 using Moq;
 using Moq.Protected;
 
-namespace Retirebot.Tests.Helpers.Azure
+namespace Microsoft.RetireaBot.Tests.Helpers.Azure
 {
     public class ManagementClientTests
     {
-        private static Retirebot.Helpers.Azure.ManagementClient BuildClient(Mock<HttpMessageHandler> handler)
+        private static Microsoft.RetireaBot.Helpers.Azure.ManagementClient BuildClient(Mock<HttpMessageHandler> handler)
         {
             var httpClient = new HttpClient(handler.Object)
             {
                 BaseAddress = new Uri("https://management.azure.com/")
             };
-            return new Retirebot.Helpers.Azure.ManagementClient(httpClient);
+            return new Microsoft.RetireaBot.Helpers.Azure.ManagementClient(httpClient);
         }
 
         private static void SetupResponse(Mock<HttpMessageHandler> handler, HttpStatusCode status, string content)

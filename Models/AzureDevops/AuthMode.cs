@@ -1,4 +1,4 @@
-﻿namespace Retirebot.Models.AzureDevOps
+﻿namespace Microsoft.RetireaBot.Models.AzureDevOps
 {
     public enum AuthMode
     {

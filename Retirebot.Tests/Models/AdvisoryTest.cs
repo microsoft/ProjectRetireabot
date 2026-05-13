@@ -1,6 +1,6 @@
-using Retirebot.Models.Azure;
+using Microsoft.RetireaBot.Models.Azure;
 
-namespace Retirebot.Tests.Models
+namespace Microsoft.RetireaBot.Tests.Models
 {
     public class AdvisoryTest
     {

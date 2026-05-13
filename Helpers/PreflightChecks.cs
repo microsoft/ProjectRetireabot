@@ -2,10 +2,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Retirebot.Models;
+using Microsoft.RetireaBot.Models;
 using System.Text.RegularExpressions;
 
-namespace Retirebot.Helpers
+namespace Microsoft.RetireaBot.Helpers
 {
     public static partial class PreflightChecks
     {
@@ -125,7 +125,7 @@ namespace Retirebot.Helpers
                 throw new InvalidOperationException($"App:TargetRepository '{targetProject}' is not a valid Azure DevOps project name.");
             }
         }
-    
+
         public static void CheckADOLabels(IConfiguration config, ILogger logger)
         {
             Dictionary<string, string?> labelPairs = new Dictionary<string, string?>() {
@@ -134,7 +134,7 @@ namespace Retirebot.Helpers
                 { ConfigKeys.App.AdvisoryLabelPrefix,config.GetSection(ConfigKeys.App.AdvisoryLabelPrefix).Get <string>() },
                 { ConfigKeys.App.ParentLabelPrefix, config.GetSection(ConfigKeys.App.ParentLabelPrefix).Get<string>() }
             };
-            
+
             foreach (var setting in labelPairs)
             {
                 if (setting.Value == null) continue;
@@ -154,6 +154,6 @@ namespace Retirebot.Helpers
                     logger.LogWarning("{labelSettingName} is {labelSettingLength} characters long which is near the 400 character limit imposed by Azure DevOps. This may cause issues with Work Item duplication checking and general reliabilty.", setting.Key, setting.Value.Length);
                 }
             }
-         }
+        }
     }
 }

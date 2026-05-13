@@ -8,8 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Polly;
-using Retirebot.Helpers;
-using Retirebot.Models;
+using Microsoft.RetireaBot.Helpers;
+using Microsoft.RetireaBot.Models;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -56,16 +56,16 @@ if (keyvaultUri != null)
 }
 
 builder.Services.AddTransient(sp =>
-    new Retirebot.Helpers.Azure.CredentialTokenHandler(
+    new Microsoft.RetireaBot.Helpers.Azure.CredentialTokenHandler(
         sp.GetRequiredService<DefaultAzureCredential>(),
         new[] { "https://management.azure.com/.default" }));
 
-builder.Services.AddHttpClient<Retirebot.Helpers.Azure.ManagementClient>(c =>
+builder.Services.AddHttpClient<Microsoft.RetireaBot.Helpers.Azure.ManagementClient>(c =>
 {
     c.BaseAddress = new Uri("https://management.azure.com/");
     c.Timeout = TimeSpan.FromSeconds(60);
 })
-    .AddHttpMessageHandler<Retirebot.Helpers.Azure.CredentialTokenHandler>()
+    .AddHttpMessageHandler<Microsoft.RetireaBot.Helpers.Azure.CredentialTokenHandler>()
         .AddPolicyHandler(Policy<HttpResponseMessage>
         .Handle<HttpRequestException>()
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
@@ -76,14 +76,14 @@ WorkItemBackend backend = Enum.Parse<WorkItemBackend>(builder.Configuration.GetS
 switch (backend)
 {
     case WorkItemBackend.GitHub:
-        builder.Services.AddSingleton<Retirebot.Helpers.GitHub.AuthModeService>();
-        builder.Services.AddSingleton<Retirebot.Helpers.GitHub.CredentialProvider>();
-        builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.GitHub.WorkItemClient>();
+        builder.Services.AddSingleton<Microsoft.RetireaBot.Helpers.GitHub.AuthModeService>();
+        builder.Services.AddSingleton<Microsoft.RetireaBot.Helpers.GitHub.CredentialProvider>();
+        builder.Services.AddSingleton<IWorkItemClient, Microsoft.RetireaBot.Helpers.GitHub.WorkItemClient>();
         break;
     case WorkItemBackend.AzureDevOps:
-        builder.Services.AddSingleton<Retirebot.Helpers.AzureDevOps.AuthModeService>();
-        builder.Services.AddSingleton<Retirebot.Helpers.AzureDevOps.CredentialProvider>();
-        builder.Services.AddSingleton<IWorkItemClient, Retirebot.Helpers.AzureDevOps.WorkItemClient>();
+        builder.Services.AddSingleton<Microsoft.RetireaBot.Helpers.AzureDevOps.AuthModeService>();
+        builder.Services.AddSingleton<Microsoft.RetireaBot.Helpers.AzureDevOps.CredentialProvider>();
+        builder.Services.AddSingleton<IWorkItemClient, Microsoft.RetireaBot.Helpers.AzureDevOps.WorkItemClient>();
         break;
     default:
         throw new InvalidOperationException($"Unsupported work item backend: {backend}");

@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Configuration;
-using Retirebot.Helpers.GitHub;
-using Retirebot.Models;
-using Retirebot.Models.GitHub;
+using Microsoft.RetireaBot.Helpers.GitHub;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.GitHub;
 
-namespace Retirebot.Tests.Helpers.GitHub
+namespace Microsoft.RetireaBot.Tests.Helpers.GitHub
 {
     public class AuthModeServiceTest
     {

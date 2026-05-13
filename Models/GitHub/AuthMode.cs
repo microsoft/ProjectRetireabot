@@ -1,4 +1,4 @@
-﻿namespace Retirebot.Models.GitHub
+﻿namespace Microsoft.RetireaBot.Models.GitHub
 {
     [Flags]
     public enum AuthMode

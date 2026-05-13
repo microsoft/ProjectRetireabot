@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using Retirebot.Models.Azure;
+using Microsoft.RetireaBot.Models.Azure;
 
-namespace Retirebot.Models.HTTP
+namespace Microsoft.RetireaBot.Models.HTTP
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum GetRetirementsResult

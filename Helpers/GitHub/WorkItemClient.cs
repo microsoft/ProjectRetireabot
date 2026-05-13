@@ -1,12 +1,12 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Octokit;
-using Retirebot.Models;
-using Retirebot.Models.Azure;
-using Retirebot.Models.HTTP;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.Azure;
+using Microsoft.RetireaBot.Models.HTTP;
 using System.Text.RegularExpressions;
 
-namespace Retirebot.Helpers.GitHub
+namespace Microsoft.RetireaBot.Helpers.GitHub
 {
     public partial class WorkItemClient : IWorkItemClient
     {

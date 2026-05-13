@@ -1,12 +1,12 @@
-                                                                                                                                                                                               using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Retirebot.Helpers;
-using Retirebot.Models;
+using Microsoft.RetireaBot.Helpers;
+using Microsoft.RetireaBot.Models;
 
-namespace Retirebot.Tests.Helpers
+namespace Microsoft.RetireaBot.Tests.Helpers
 {
     public class PreflightChecksTest
     {
@@ -87,8 +87,8 @@ namespace Retirebot.Tests.Helpers
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton(config);
-                    services.AddSingleton<Retirebot.Helpers.GitHub.AuthModeService>();
-                    services.AddSingleton<Retirebot.Helpers.GitHub.CredentialProvider>();
+                    services.AddSingleton<Microsoft.RetireaBot.Helpers.GitHub.AuthModeService>();
+                    services.AddSingleton<Microsoft.RetireaBot.Helpers.GitHub.CredentialProvider>();
                 })
                 .Build();
 

@@ -6,12 +6,12 @@ using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
 using Microsoft.VisualStudio.Services.WebApi.Patch;
 using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
-using Retirebot.Models;
-using Retirebot.Models.Azure;
-using Retirebot.Models.HTTP;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.Azure;
+using Microsoft.RetireaBot.Models.HTTP;
 using System.Text.RegularExpressions;
 
-namespace Retirebot.Helpers.AzureDevOps
+namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 {
     public partial class WorkItemClient : IWorkItemClient
     {
@@ -278,14 +278,16 @@ namespace Retirebot.Helpers.AzureDevOps
                             }
                         }
                     }
-                } catch (Exception ex) {
+                }
+                catch (Exception ex)
+                {
                     _logger.LogError(ex, "Failed to search for existing work items in batch.");
                 }
-                
+
                 // Be reasonable with the query requests
                 if (i + batchSize < advisories.Count)
                 {
-                    await Task.Delay(2000); 
+                    await Task.Delay(2000);
                 }
             }
             return existingWorkItems;
@@ -338,7 +340,8 @@ namespace Retirebot.Helpers.AzureDevOps
                             new JsonPatchOperation {Operation = Operation.Replace, Path = "/fields/System.Description", Value = updatedBody},
                         };
 
-                    foreach(var currentItem in newRefs) { 
+                    foreach (var currentItem in newRefs)
+                    {
                         workItemPatch.Add(new JsonPatchOperation
                         {
                             Operation = Operation.Add,

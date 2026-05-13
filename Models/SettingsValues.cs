@@ -1,4 +1,4 @@
-﻿namespace Retirebot.Models
+﻿namespace Microsoft.RetireaBot.Models
 {
     public enum WorkItemScope
     {

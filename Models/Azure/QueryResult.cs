@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Retirebot.Models.Azure
+namespace Microsoft.RetireaBot.Models.Azure
 {
     public class QueryResult<T>
     {

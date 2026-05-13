@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Retirebot.Models.HTTP
+namespace Microsoft.RetireaBot.Models.HTTP
 {
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum ParentWorkItemAction

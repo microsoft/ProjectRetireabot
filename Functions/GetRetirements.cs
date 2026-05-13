@@ -2,15 +2,15 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Retirebot.Helpers;
-using Retirebot.Models;
-using Retirebot.Models.HTTP;
-using Retirebot.Models.Azure;
+using Microsoft.RetireaBot.Helpers;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.HTTP;
+using Microsoft.RetireaBot.Models.Azure;
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 
-namespace Retirebot.Functions
+namespace Microsoft.RetireaBot.Functions
 {
     public class GetRetirements
     {

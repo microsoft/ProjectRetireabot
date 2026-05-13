@@ -1,8 +1,8 @@
-﻿using Retirebot.Models;
-using Retirebot.Models.Azure;
-using Retirebot.Models.HTTP;
+﻿using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.Azure;
+using Microsoft.RetireaBot.Models.HTTP;
 
-namespace Retirebot.Helpers
+namespace Microsoft.RetireaBot.Helpers
 {
     public interface IWorkItemClient
     {

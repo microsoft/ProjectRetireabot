@@ -4,13 +4,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
-using Retirebot.Functions;
-using Retirebot.Helpers;
-using Retirebot.Models;
-using Retirebot.Models.Azure;
-using Retirebot.Models.HTTP;
+using Microsoft.RetireaBot.Functions;
+using Microsoft.RetireaBot.Helpers;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.Azure;
+using Microsoft.RetireaBot.Models.HTTP;
 
-namespace Retirebot.Tests.Functions
+namespace Microsoft.RetireaBot.Tests.Functions
 {
     public class GetRetirementsTest
     {
@@ -49,7 +49,7 @@ namespace Retirebot.Tests.Functions
             };
         }
 
-        private static (GetRetirements function, Mock<IWorkItemClient> mockWorkItem, Mock<Retirebot.Helpers.Azure.ManagementClient> mockMgmt) BuildFunction(
+        private static (GetRetirements function, Mock<IWorkItemClient> mockWorkItem, Mock<Microsoft.RetireaBot.Helpers.Azure.ManagementClient> mockMgmt) BuildFunction(
             Dictionary<string, string?>? configOverrides = null)
         {
             var defaults = new Dictionary<string, string?>
@@ -77,7 +77,7 @@ namespace Retirebot.Tests.Functions
             {
                 BaseAddress = new Uri("https://management.azure.com/")
             };
-            var mockMgmt = new Mock<Retirebot.Helpers.Azure.ManagementClient>(mockHttpClient) { CallBase = false };
+            var mockMgmt = new Mock<Microsoft.RetireaBot.Helpers.Azure.ManagementClient>(mockHttpClient) { CallBase = false };
             var mockWorkItem = new Mock<IWorkItemClient>();
 
             var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, mockWorkItem.Object);
@@ -85,7 +85,7 @@ namespace Retirebot.Tests.Functions
             return (function, mockWorkItem, mockMgmt);
         }
 
-        private static (Retirebot.Helpers.Azure.ManagementClient client, Mock<HttpMessageHandler> handler) BuildMockManagementClient()
+        private static (Microsoft.RetireaBot.Helpers.Azure.ManagementClient client, Mock<HttpMessageHandler> handler) BuildMockManagementClient()
         {
             var handler = new Mock<HttpMessageHandler>();
             var httpClient = new HttpClient(handler.Object)
@@ -93,7 +93,7 @@ namespace Retirebot.Tests.Functions
                 BaseAddress = new Uri("https://management.azure.com/")
             };
 
-            return (new Retirebot.Helpers.Azure.ManagementClient(httpClient), handler);
+            return (new Microsoft.RetireaBot.Helpers.Azure.ManagementClient(httpClient), handler);
         }
 
         private static void SetupHttpResource(Mock<HttpMessageHandler> handler, object responseBody)
@@ -142,7 +142,7 @@ namespace Retirebot.Tests.Functions
 
             var result = await function.GetRetirementsASync();
 
-            Assert.Equal(Retirebot.Models.HTTP.GetRetirementsResult.Failure, result.Result);
+            Assert.Equal(Microsoft.RetireaBot.Models.HTTP.GetRetirementsResult.Failure, result.Result);
             Assert.Contains("No subscriptions", result.ResultDescription);
         }
 

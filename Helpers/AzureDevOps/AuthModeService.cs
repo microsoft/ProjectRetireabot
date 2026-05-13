@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Retirebot.Models;
-using Retirebot.Models.AzureDevOps;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.AzureDevOps;
 
-namespace Retirebot.Helpers.AzureDevOps
+namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 {
     public class AuthModeService
     {

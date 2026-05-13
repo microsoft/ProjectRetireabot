@@ -1,6 +1,6 @@
-﻿using Retirebot.Models.Azure;
+﻿using Microsoft.RetireaBot.Models.Azure;
 
-namespace Retirebot.Helpers
+namespace Microsoft.RetireaBot.Helpers
 {
     public class WorkItemClientCommon
     {

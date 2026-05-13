@@ -1,4 +1,4 @@
-namespace Retirebot.Tests
+namespace Microsoft.RetireaBot.Tests
 {
     internal static class TestData
     {

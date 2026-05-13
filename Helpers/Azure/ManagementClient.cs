@@ -1,8 +1,8 @@
-﻿using Retirebot.Models.Azure;
+﻿using Microsoft.RetireaBot.Models.Azure;
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace Retirebot.Helpers.Azure
+namespace Microsoft.RetireaBot.Helpers.Azure
 {
     public class ManagementClient
     {

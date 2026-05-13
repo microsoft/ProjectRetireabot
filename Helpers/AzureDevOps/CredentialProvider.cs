@@ -6,11 +6,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.OAuth;
 using Microsoft.VisualStudio.Services.WebApi;
-using Retirebot.Models;
-using Retirebot.Models.AzureDevOps;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.AzureDevOps;
 using System.Security.Cryptography.X509Certificates;
 
-namespace Retirebot.Helpers.AzureDevOps
+namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 {
     public class CredentialProvider
     {

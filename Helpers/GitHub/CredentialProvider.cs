@@ -6,10 +6,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.KeyVaultExtensions;
 using Microsoft.IdentityModel.Tokens;
 using Octokit;
-using Retirebot.Models.GitHub;
+using Microsoft.RetireaBot.Models.GitHub;
 using System.IdentityModel.Tokens.Jwt;
 
-namespace Retirebot.Helpers.GitHub
+namespace Microsoft.RetireaBot.Helpers.GitHub
 {
     public class CredentialProvider
     {

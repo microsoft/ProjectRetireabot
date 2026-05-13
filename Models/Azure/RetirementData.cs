@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Retirebot.Models.Azure
+namespace Microsoft.RetireaBot.Models.Azure
 {
     public class RetirementData
     {
@@ -39,7 +39,7 @@ namespace Retirebot.Models.Azure
         [JsonPropertyName("recommendationOfferingId")]
         public required string RecommendationOfferingId { get; set; }
         [JsonPropertyName("shortDescriptionProblem")]
-        public string? ShortDescriptionProblem {  get; set; }
+        public string? ShortDescriptionProblem { get; set; }
         [JsonPropertyName("shortDescriptionSolution")]
         public string? ShortDescriptionSolution { get; set; }
 

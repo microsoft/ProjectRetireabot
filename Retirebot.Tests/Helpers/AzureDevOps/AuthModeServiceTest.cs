@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Retirebot.Helpers.AzureDevOps;
-using Retirebot.Models;
-using Retirebot.Models.AzureDevOps;
+using Microsoft.RetireaBot.Helpers.AzureDevOps;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.AzureDevOps;
 
-namespace Retirebot.Tests.Helpers.AzureDevOps
+namespace Microsoft.RetireaBot.Tests.Helpers.AzureDevOps
 {
     public class AuthModeServiceTest
     {

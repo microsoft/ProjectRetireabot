@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Retirebot.Models;
-using Retirebot.Models.GitHub;
+using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.GitHub;
 
-namespace Retirebot.Helpers.GitHub
+namespace Microsoft.RetireaBot.Helpers.GitHub
 {
     public class AuthModeService
     {
