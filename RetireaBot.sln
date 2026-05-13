@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36915.13
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetireaBot", "RetireaBot.csproj", "{CEE02FD4-6E21-4390-9064-1643E42BB2CA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetireaBot", "src\RetireaBot\RetireaBot.csproj", "{CEE02FD4-6E21-4390-9064-1643E42BB2CA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetireaBot.Tests", "Tests\RetireaBot.Tests.csproj", "{90E9DD49-43E8-4F01-B203-F46EC128994F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetireaBot.Tests", "tests\RetireaBot.Tests\RetireaBot.Tests.csproj", "{90E9DD49-43E8-4F01-B203-F46EC128994F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
