@@ -115,6 +115,9 @@ param httpEndpointOutput bool = false
 @description('(Optional) Whether the manual HTTP endpoint should allow users to run dry-runs. Default false')
 param httpEndpointWhatIf bool = false
 
+@description('(Optional) The NCRONTAB expression that determines how often the timer-triggered function runs. Default: every Monday at 00:00 UTC ("0 0 0 * * 1"). See https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer for syntax.')
+param timerTrigger string = '0 0 0 * * 1'
+
 @description('(Optional) Whether GitHub CoPilot should be assigned to issues created by RetireaBot')
 param gitHubCoPilotAssign bool = false
 
@@ -499,6 +502,10 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           {
             name: 'App__HTTPEndpointWhatIf'
             value: httpEndpointWhatIf
+          }
+          {
+            name: 'App__TimerTrigger'
+            value: timerTrigger
           }
           {
             name: 'App__TargetRepository'

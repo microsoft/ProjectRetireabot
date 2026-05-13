@@ -16,7 +16,7 @@ This is the repository contains the source code to RetireaBot, an under-developm
 
 ## Usage
 
-By default this function will run every Monday at 00:00 `"0 0 0 * * 1`. This can be tweaked by changing the Cron expression inside of [GetRetirements.cs](src/RetireaBot/Functions/GetRetirements.cs).
+By default this function will run every Monday at 00:00 UTC (`0 0 0 * * 1`). This can be tweaked by setting the `timerTrigger` parameter when deploying with `azd`, or by setting the `App__TimerTrigger` app setting on the deployed Function App.
 
 ## Deployment
 
@@ -43,6 +43,7 @@ There are some key parameters you need to specify:
 | httpEndpointEnable           | `false`  | Whether the manual HTTP endpoint should be enabled. Default: false                                                                                                       |
 | httpEndpointOutput           | `false`  | Whether the manual HTTP endpoint should display extended information about its run Default: false                                                                        |
 | httpEndpointWhatIf           | `false`  | Whether the manual HTTP endpoint should allow users to run dry-runs Default: false                                                                                       |
+| timerTrigger                 | `false`  | NCRONTAB expression for the scheduled timer trigger. Default: `0 0 0 * * 1` (every Monday at 00:00 UTC)                                                                  |
 | gitHubCoPilotAssign          | `false`  | Whether GitHub CoPilot should be assigned to try and mitigate issues (requires a GitHub CoPilot license) Default: false                                                  |
 | resourceGroupRepositoryMap   | `false`  | If "perResourceGroup" mode is being used, these mappings decide which repositories issues are created based on their resource groups                                     |
 | useTriageRepoForUnmapped     | `false`  | Should unmapped resources have their work items created in the triage repository/target repository in perResourceGroup mode. Default: true                               |
