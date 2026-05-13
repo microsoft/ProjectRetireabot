@@ -1,9 +1,9 @@
-name: azure-retirebot
+name: azure-retireabot
 metadata:
-  template: azure-retirebot@1.0
+  template: azure-retireabot@1.0
 services:
-  retirebot:
-    project: .
+  retireabot:
+    project: ./src/RetireaBot
     language: dotnet
     host: function
 hooks:

@@ -1,6 +1,6 @@
-# Retirebot
+# RetireaBot
 
-This is the repository contains the source code to Retirebot, an under-development proof-of-concept to help customers be on top of their resource migrations of EoL Azure services and or SKUs.
+This is the repository contains the source code to RetireaBot, an under-development proof-of-concept to help customers be on top of their resource migrations of EoL Azure services and or SKUs.
 
 ## How it works (with GitHub)
 
@@ -16,13 +16,13 @@ This is the repository contains the source code to Retirebot, an under-developme
 
 ## Usage
 
-By default this function will run every Monday at 00:00 `"0 0 0 * * 1`. This can be tweaked by changing the Cron expression inside of [GetRetirements.cs](Functions/GetRetirements.cs).
+By default this function will run every Monday at 00:00 `"0 0 0 * * 1`. This can be tweaked by changing the Cron expression inside of [GetRetirements.cs](src/RetireaBot/Functions/GetRetirements.cs).
 
 ## Deployment
 
 The preferred way to deploy this program is using the [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd), which handles both provisioning of the architecture and the deployment of the application to a target resource group.
 
-Before provisioning the architecture, you need to specify parameters to define the behaviour of RetireBot, copy the example json, and remove `.example`.
+Before provisioning the architecture, you need to specify parameters to define the behaviour of RetireaBot, copy the example json, and remove `.example`.
 
 There are some key parameters you need to specify:
 
@@ -30,9 +30,9 @@ There are some key parameters you need to specify:
 | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | location                     | `true`   | The location where the resources are deployed                                                                                                                            |
 | targetRepository<sub>1</sub> | `true`   | Target project or repository to create work items on from advisories                                                                                                     |
-| workItemBackend              | `true`   | What work item backend RetireBot should use to create work items in (Valid options: 'GitHub', 'AzureDevOps')                                                             |
-| targetResourceGroup          | `false`  | The resource group RetireBot should create issues for, leave blank any resource group                                                                                    |
-| advisoryLabel                | `false`  | What label should be attached to all work items to identify it was created by RetireBot. Default: advisor                                                                |
+| workItemBackend              | `true`   | What work item backend RetireaBot should use to create work items in (Valid options: 'GitHub', 'AzureDevOps')                                                            |
+| targetResourceGroup          | `false`  | The resource group RetireaBot should create issues for, leave blank any resource group                                                                                   |
+| advisoryLabel                | `false`  | What label should be attached to all work items to identify it was created by RetireaBot. Default: advisor                                                               |
 | advisoryParentLabel          | `false`  | What label should be attached to parent work items to identify them. Default: tracking                                                                                   |
 | advisoryLabelPrefix          | `false`  | What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-                                                   |
 | parentLabelPrefix            | `false`  | What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-                                       |
@@ -69,22 +69,22 @@ When `workItemBackend` is set to `GitHub`, you have some additional properties y
 
 Note: A deployment can have both a PAT and App Registration defined, the app with run in a 'Hybrid' mode, where PAT is used a secondary method to interact with GitHub.
 
-Once you have configured RetireBot with ensure your parameters file is called `main.parameters.json`, and run `azd up` at the root of the project directory, which it will then provision the architecture and deploy the application.
+Once you have configured RetireaBot with ensure your parameters file is called `main.parameters.json`, and run `azd up` at the root of the project directory, which it will then provision the architecture and deploy the application.
 
 ### Azure DevOps
 
-When `workItemBackend` is set to `AzureDevOps`, you have some additional properties to configure how RetireBot interacts with ADO.
+When `workItemBackend` is set to `AzureDevOps`, you have some additional properties to configure how RetireaBot interacts with ADO.
 
 | Name                       | Required            | Description                                                                                                   |
 | -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- |
 | adoOrganisationUrl         | `true`              | URL of the Azure DevOps Organisation                                                                          |
-| adoPAT                     | `false`             | The PAT that allows RetireBot to interact with your Azure DevOps organisation                                 |
+| adoPAT                     | `false`             | The PAT that allows RetireaBot to interact with your Azure DevOps organisation                                |
 | adoClientId                | `false`             | The client ID of the app registration used to authenticate with Azure DevOps                                  |
 | adoTenantId                | `false`             | The tenant ID of the app registration used to authenticate with Azure DevOps                                  |
 | adoClientSecret            | `false`             | The client secret of the app registration used to authenticate with Azure DevOps                              |
 | adoCertificateId           | `false`             | The ID the certificate should be stored as in the KeyVault for Azure DevOps certificate auth                  |
 | adoCertificatePath         | `false`             | The path of the certificate file (PFX/PEM) to be imported into the KeyVault for Azure DevOps certificate auth |
-| adoWorkItemDefaultAssignee | `false`<sub>1</sub> | (Optional) The default assignee for work items created by RetireBot in Azure DevOps                           |
+| adoWorkItemDefaultAssignee | `false`<sub>1</sub> | (Optional) The default assignee for work items created by RetireaBot in Azure DevOps                          |
 | adoWorkItemOpenState       | `false`<sub>1</sub> | (Optional) The state to use when opening work items in Azure DevOps. Default: New                             |
 | adoWorkItemClosedState     | `false`<sub>1</sub> | (Optional) The state to use when closing work items in Azure DevOps. Default: Closed                          |
 | adoWorkItemType            | `false`<sub>1</sub> | (Optional) The work item type to create in Azure DevOps. Default: Task                                        |
