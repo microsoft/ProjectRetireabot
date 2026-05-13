@@ -1,0 +1,12 @@
+name: azure-retireabot
+metadata:
+  template: azure-retireabot@1.0
+services:
+  retireabot:
+    project: ./src/RetireaBot
+    language: dotnet
+    host: function
+hooks:
+  postprovision:
+    shell: pwsh
+    run: ./infra/scripts/post-provision.ps1

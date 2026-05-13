@@ -1,0 +1,67 @@
+﻿namespace Microsoft.RetireaBot.Models
+{
+    public enum WorkItemScope
+    {
+        Monolithic,
+        PerResourceGroup
+    }
+
+    public enum WorkItemBackend
+    {
+        AzureDevOps,
+        GitHub
+    }
+
+    public static class ConfigKeys
+    {
+        public const string AzureClientId = "AZURE_CLIENT_ID";
+
+        public static class AzureDevOps
+        {
+            public const string ClientId = "AzureDevOps:ClientId";
+            public const string TenantId = "AzureDevOps:TenantId";
+            public const string ClientSecret = "AzureDevOps:ClientSecret";
+            public const string CertificateId = "AzureDevOps:CertificateId";
+            public const string PAT = "AzureDevOps:PAT";
+            public const string OrganisationUrl = "AzureDevOps:OrganisationUrl";
+            public const string WorkItemDefaultAssignee = "AzureDevOps:WorkItemDefaultAssignee";
+            public const string WorkItemClosedState = "AzureDevOps:WorkItemClosedState";
+            public const string WorkItemOpenState = "AzureDevOps:WorkItemOpenState";
+            public const string WorkItemType = "AzureDevOps:WorkItemType";
+        }
+
+        public static class GitHub
+        {
+            public const string AppId = "GitHub:AppId";
+            public const string AppPrivateKeyId = "GitHub:AppPrivateKeyId";
+            public const string AppInstallId = "GitHub:AppInstallId";
+            public const string PAT = "GitHub:PAT";
+        }
+
+        public static class App
+        {
+            public const string AdvisoryLabel = "App:AdvisoryLabel";
+            public const string AdvisoryParentLabel = "App:AdvisoryParentLabel";
+            public const string AdvisoryLabelPrefix = "App:AdvisoryLabelPrefix";
+            public const string AssignGitHubCopilot = "App:AssignGitHubCopilot";
+            public const string CreateParentWorkItems = "App:CreateParentWorkItems";
+            public const string CreateChildWorkItems = "App:CreateChildWorkItems";
+            public const string HTTPEndpointEnable = "App:HTTPEndpointEnable";
+            public const string HTTPEndpointOutput = "App:HTTPEndpointOutput";
+            public const string HTTPEndpointWhatIf = "App:HTTPEndpointWhatIf";
+            public const string ParentLabelPrefix = "App:ParentLabelPrefix";
+            public const string TargetRepository = "App:TargetRepository";
+            public const string TargetResourceGroupMapping = "App:TargetResourceGroupMapping";
+            public const string TargetResourceGroup = "App:TargetResourceGroup";
+            public const string UseTriageRepoForUnmapped = "App:UseTriageRepoForUnmapped";
+            public const string UnmappedRepository = "App:UnmappedRepository";
+            public const string WorkItemBackend = "App:WorkItemBackend";
+            public const string WorkItemScope = "App:WorkItemScope";
+        }
+
+        public static class KeyVault
+        {
+            public const string Uri = "KeyVault:Uri";
+        }
+    }
+}

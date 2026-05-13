@@ -427,3 +427,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# RetireaBot project-specific ignores
+local.settings.json
+appsettings.development.json
+main.parameters.json
+private-key.pem

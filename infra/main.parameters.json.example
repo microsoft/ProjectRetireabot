@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "deploymentName": {
+      "value": "azeg"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "gitHubPAT": {
+      "value": "ghp_blahblahblah"
+    },
+    "gitHubAppId": {
+      "value": "12345"
+    },
+    "gitHubInstallId": {
+      "value": "12345"
+    },
+    "gitHubPrivateKeyId": {
+      "value": "test-key"
+    },
+    "gitHubPrivateKeyPath": {
+      "value": "infra/private-key.pem"
+    },
+    "targetRepository": {
+      "value": ""
+    },
+    "targetResourceGroup": {
+      "value": ""
+    },
+    "workItemScope": {
+      "value": "monolithic"
+    },
+    "resourceGroupRepositoryMap": {
+      "value": [
+        {
+          "name": "rg-resources",
+          "type": "ResourceGroup",
+          "repository": "ExampleUser/TestRepo"
+        }
+      ]
+    }
+  }
+}
