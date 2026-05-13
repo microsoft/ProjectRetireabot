@@ -16,7 +16,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [Theory]
         [InlineData("owner/repo")]
         [InlineData("my-org/my-repo.name")]
-        [InlineData("ZanyLeonic/RetireBot")]
+        [InlineData("microsoft/ProjectRetireaBot")]
         public void CheckTargetRepository_ValidGitHubRepository_DoesNotThrow(string repo)
         {
             var config = BuildConfig(new Dictionary<string, string?>
@@ -44,7 +44,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         }
 
         [Theory]
-        [InlineData("RetireBot")]
+        [InlineData("RetireaBot")]
         [InlineData("My-Retirement-Repo")]
         [InlineData("Another_repository")]
         public void CheckADOProjectName_ValidADOProjectName_DoesNotThrow(string repo)
@@ -101,7 +101,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [Theory]
         [InlineData("https://dev.azure.com/test-org")]
         [InlineData("https://testorg.visualstudio.com")]
-        [InlineData("https://dev.azure.com/retirebot")]
+        [InlineData("https://dev.azure.com/retireabot")]
         public void CheckADOOrganisationURL_ValidADOOrganisationURL_DoesNotThrow(string orgURL)
         {
             var config = BuildConfig(new Dictionary<string, string?>

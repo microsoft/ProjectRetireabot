@@ -350,7 +350,7 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
                             {
                                 rel = "System.LinkTypes.Hierarchy-Forward",
                                 url = $"{_credentialProvider.GetConnectionUri()}/{currentItem.ProjectName}/_apis/wit/workItems/{currentItem.WorkItemId}",
-                                attributes = new { comment = "Auto-linked by Retirebot" }
+                                attributes = new { comment = "Auto-linked by RetireaBot" }
                             }
                         });
                     }
@@ -422,7 +422,7 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
                                 url = $"{_credentialProvider.GetConnectionUri()}/{kvp.Key}/_apis/wit/workItems/{wki.Id}",
                                 attributes = new
                                 {
-                                    comment = "Auto-linked by Retirebot"
+                                    comment = "Auto-linked by RetireaBot"
                                 }
                             }
                         });

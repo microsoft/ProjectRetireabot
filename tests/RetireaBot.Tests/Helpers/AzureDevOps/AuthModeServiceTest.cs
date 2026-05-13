@@ -35,7 +35,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.AzureDevOps
             {
                 [ConfigKeys.AzureDevOps.ClientId] = "a443af02-50e0-4b7a-910b-3a87ce09c674",
                 [ConfigKeys.AzureDevOps.TenantId] = "27d78fb1-38c6-4059-b33c-8b77243b0fe1",
-                [ConfigKeys.AzureDevOps.CertificateId] = "retirebot",
+                [ConfigKeys.AzureDevOps.CertificateId] = "retireabot",
             }));
 
             Assert.Equal(AuthMode.Certificate, service.GetAuthMode());
@@ -85,7 +85,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.AzureDevOps
                 [ConfigKeys.AzureClientId] = "a443af02-50e0-4b7a-910b-3a87ce09c674",
                 [ConfigKeys.AzureDevOps.ClientId] = "a443af02-50e0-4b7a-910b-3a87ce09c674",
                 [ConfigKeys.AzureDevOps.TenantId] = "27d78fb1-38c6-4059-b33c-8b77243b0fe1",
-                [ConfigKeys.AzureDevOps.CertificateId] = "retirebot",
+                [ConfigKeys.AzureDevOps.CertificateId] = "retireabot",
                 [ConfigKeys.AzureDevOps.ClientSecret] = "03b0bf30-3ed5-4e8a-826b-b8f8f9f31698",
                 [ConfigKeys.AzureDevOps.PAT] = "ado_test123"
             }));

@@ -83,7 +83,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
         private GitHubClient CreateClient(string token)
         {
-            return new GitHubClient(new ProductHeaderValue("Retirebot"))
+            return new GitHubClient(new ProductHeaderValue("RetireaBot"))
             {
                 Credentials = new Credentials(token)
             };
@@ -130,7 +130,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
             string token = new JwtSecurityTokenHandler().WriteToken(jwt);
 
             // have to get an install authenticated GitHubClient to do operations
-            GitHubClient intermediate = new GitHubClient(new ProductHeaderValue("Retirebot"))
+            GitHubClient intermediate = new GitHubClient(new ProductHeaderValue("RetireaBot"))
             {
                 Credentials = new Credentials(token, AuthenticationType.Bearer)
             };
@@ -140,7 +140,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
             _logger.LogInformation("Created new App Client, valid until {Expiry}", _tokenExpiry);
 
-            return new GitHubClient(new ProductHeaderValue("Retirebot"))
+            return new GitHubClient(new ProductHeaderValue("RetireaBot"))
             {
                 Credentials = new Credentials(response.Result.Token)
             };
