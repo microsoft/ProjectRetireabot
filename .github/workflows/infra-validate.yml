@@ -1,0 +1,12 @@
+name: "Infrastructure Validate"
+on:
+    pull_request:
+        paths: ["infra/**", ".github/workflows/infra-validate.yml"]
+
+jobs:
+    bicep-build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - run: az bicep build --file infra/main.bicep
+            - run: az bicep lint --file infra/main.bicep
