@@ -1,0 +1,49 @@
+version: 2
+
+updates:
+  # .NET dependencies for the main project and tests
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    groups:
+      azure-sdk:
+        patterns:
+          - "Azure.*"
+      azure-functions-worker:
+        patterns:
+          - "Microsoft.Azure.Functions.Worker*"
+      microsoft-extensions:
+        patterns:
+          - "Microsoft.Extensions.*"
+      application-insights:
+        patterns:
+          - "Microsoft.ApplicationInsights*"
+      identity-model:
+        patterns:
+          - "Microsoft.IdentityModel.*"
+          - "System.IdentityModel.*"
+      azure-devops-clients:
+        patterns:
+          - "Microsoft.TeamFoundationServer.*"
+          - "Microsoft.VisualStudio.Services.*"
+      test-dependencies:
+        patterns:
+          - "xunit*"
+          - "Moq"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.collector"
+
+  # GitHub Actions used in workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "github-actions"
