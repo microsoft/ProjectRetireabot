@@ -80,7 +80,7 @@ namespace Microsoft.RetireaBot.Tests.Functions
             var mockMgmt = new Mock<Microsoft.RetireaBot.Helpers.Azure.ManagementClient>(mockHttpClient) { CallBase = false };
             var mockWorkItem = new Mock<IWorkItemClient>();
 
-            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, mockWorkItem.Object);
+            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, mockWorkItem.Object, null!);
 
             return (function, mockWorkItem, mockMgmt);
         }
@@ -153,7 +153,7 @@ namespace Microsoft.RetireaBot.Tests.Functions
             var advisory = CreateAdvisory();
 
             mockMgmt.Setup(m => m.GetSubscriptionsAsync()).ReturnsAsync(new[] { "sub-1" });
-            mockMgmt.Setup(m => m.RunQueryAsync("sub-1", It.IsAny<string>()))
+            mockMgmt.Setup(m => m.RunQueryAsync<RetirementData>("sub-1", It.IsAny<string>()))
                 .ReturnsAsync(new QueryResult<RetirementData>
                 {
                     Data = new List<RetirementData>() { RetirementDataFromAdvisory(advisory) },
@@ -221,7 +221,7 @@ namespace Microsoft.RetireaBot.Tests.Functions
 
             var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
 
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object);
+            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object, null!);
 
             await sut.GetRetirementsASync();
 
@@ -259,7 +259,7 @@ namespace Microsoft.RetireaBot.Tests.Functions
                 .ReturnsAsync(new List<(Advisory, WorkItem)>());
 
             var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object);
+            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object, null!);
 
             await sut.GetRetirementsASync();
 

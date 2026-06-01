@@ -9,12 +9,15 @@ using Microsoft.RetireaBot.Models.Azure;
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using Microsoft.RetireaBot.Helpers.Lifecycle;
+using Microsoft.RetireaBot.Models.Lifecycle;
 
 namespace Microsoft.RetireaBot.Functions
 {
     public class GetRetirements
     {
         private readonly ILogger _logger;
+        private readonly LifecycleClient _lifecycleClient;
         private readonly Helpers.Azure.ManagementClient _managementClient;
         private readonly string _advisoryQuery;
 
@@ -31,6 +34,11 @@ namespace Microsoft.RetireaBot.Functions
         private readonly bool _httpEndpointOutput;
         private readonly bool _httpEndpointWhatIf;
 
+        private readonly bool _lifecycleSignalsEnable;
+        private readonly TimeSpan _lifecycleWarningWindow;
+
+        private readonly string _aksResourceQuery = "resources | where type =~ 'microsoft.containerservice/managedclusters' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.kubernetesVersion)";
+        private readonly string _postgreSqlResourceQuery = "resources | where type =~ 'microsoft.dbforpostgresql/flexibleservers' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.version)";
         private readonly string _baseQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
 
         private readonly IConfiguration _config;
@@ -41,11 +49,12 @@ namespace Microsoft.RetireaBot.Functions
 
         private Dictionary<string, string>? _subscriptionToRepoMap;
 
-        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IWorkItemClient workItemClient)
+        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IWorkItemClient workItemClient, LifecycleClient lifecycleClient)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
             _config = config;
+            _lifecycleClient = lifecycleClient;
             _workItemClient = workItemClient;
 
             _targetRepository = _config.GetSection(ConfigKeys.App.TargetRepository).Get<string>() ?? throw new InvalidOperationException("App:TargetRepository is not configured.");
@@ -56,6 +65,10 @@ namespace Microsoft.RetireaBot.Functions
             _rgRepoMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
+
+
+            _lifecycleSignalsEnable = _config.GetSection(ConfigKeys.App.LifecycleSignalsEnable).Get<bool?>() ?? false;
+            _lifecycleWarningWindow = TimeSpan.FromDays(_config.GetSection(ConfigKeys.App.LifecycleWarningWindowDays).Get<int?>() ?? 180);
 
             _assignCopilot = _config.GetSection(ConfigKeys.App.AssignGitHubCopilot).Get<bool?>() ?? false;
             _createParentWorkItems = config.GetSection(ConfigKeys.App.CreateParentWorkItems).Get<bool?>() ?? true;
@@ -225,13 +238,23 @@ namespace Microsoft.RetireaBot.Functions
 
             foreach (string sub in subs)
             {
-                QueryResult<RetirementData> data = await _managementClient.RunQueryAsync(sub, _advisoryQuery);
+                QueryResult<RetirementData> data = await _managementClient.RunQueryAsync<RetirementData>(sub, _advisoryQuery);
 
                 _logger.LogInformation("Subscription {SubscriptionId}: found {Count} retirement advisories", sub, data.Length);
 
                 for (int i = 0; i < data.Length; i++)
                 {
                     advisories.Add(data.Data[i].ToAdvisory());
+                }
+            }
+
+            if (_lifecycleSignalsEnable)
+            {
+                List<Advisory> lifecycleAdvisories = await GetLifecycleAdvisoriesASync(subs);
+                if (lifecycleAdvisories.Count > 0)
+                {
+                    _logger.LogInformation("Adding {Count} lifecycle advisories to the pipeline", lifecycleAdvisories.Count);
+                    advisories.AddRange(lifecycleAdvisories);
                 }
             }
 
@@ -351,6 +374,46 @@ namespace Microsoft.RetireaBot.Functions
             }
 
             return response;
+        }
+
+        public async Task<List<Advisory>> GetLifecycleAdvisoriesASync(string[] subscriptions)
+        {
+            var result = new List<Advisory>();
+
+            DateTime now = DateTime.UtcNow;
+
+            var aksEntries = await _lifecycleClient.GetProductEntriesASync(LifecycleProduct.AksKubernetes);
+            var pgEntries = await _lifecycleClient.GetProductEntriesASync(LifecycleProduct.AzurePostgreSQLFlexible);
+
+            var aksByVersion = aksEntries.GroupBy(e => e.Version).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            var pgByVersion = pgEntries.GroupBy(e => e.Version).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (string sub in subscriptions)
+            {
+                if (aksByVersion.Count > 0)
+                {
+                    QueryResult<VersionedResource> aksResources = await _managementClient.RunQueryAsync<VersionedResource>(sub, _aksResourceQuery);
+                    _logger.LogInformation("Subscription {SubscriptionId}: inspecting {Count} AKS clusters for lifecycle signals", sub, aksResources.Length);
+                    foreach (var resource in aksResources.Data)
+                    {
+                        Advisory? advisory = LifecycleAdvisoryGenerator.TryCreate(resource, aksByVersion, LifecycleProduct.AksKubernetes, now, _lifecycleWarningWindow);
+                        if (advisory != null) result.Add(advisory);
+                    }
+                }
+
+                if (pgByVersion.Count > 0)
+                {
+                    QueryResult<VersionedResource> pgResources = await _managementClient.RunQueryAsync<VersionedResource>(sub, _postgreSqlResourceQuery);
+                    _logger.LogInformation("Subscription {SubscriptionId}: inspecting {Count} PostgreSQL flexible servers for lifecycle signals", sub, pgResources.Length);
+                    foreach (var resource in pgResources.Data)
+                    {
+                        Advisory? advisory = LifecycleAdvisoryGenerator.TryCreate(resource, pgByVersion, LifecycleProduct.AzurePostgreSQLFlexible, now, _lifecycleWarningWindow);
+                        if (advisory != null) result.Add(advisory);
+                    }
+                }
+            }
+
+            return result;
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.RetireaBot.Models.Azure;
+using Microsoft.RetireaBot.Models.Lifecycle;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -27,7 +28,7 @@ namespace Microsoft.RetireaBot.Helpers.Azure
                 .ToArray();
         }
 
-        public virtual async Task<QueryResult<RetirementData>> RunQueryAsync(string subscriptionId, string query)
+        public virtual async Task<QueryResult<T>> RunQueryAsync<T>(string subscriptionId, string query)
         {
             string uri = "/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01";
 
@@ -40,7 +41,7 @@ namespace Microsoft.RetireaBot.Helpers.Azure
             var response = await _client.PostAsJsonAsync(uri, requestBody);
             response.EnsureSuccessStatusCode();
 
-            var result = await response.Content.ReadFromJsonAsync<QueryResult<RetirementData>>();
+            var result = await response.Content.ReadFromJsonAsync<QueryResult<T>>();
 
             if (result == null)
             {
