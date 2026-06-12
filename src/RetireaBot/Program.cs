@@ -1,3 +1,4 @@
+using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys;
@@ -39,10 +40,15 @@ builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
 
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
-DefaultAzureCredential credentials = new DefaultAzureCredential(new DefaultAzureCredentialOptions
-{
-    ManagedIdentityClientId = builder.Configuration.GetSection(ConfigKeys.AzureClientId).Get<string>()
-});
+string? azureClientId = builder.Configuration.GetSection(ConfigKeys.AzureClientId).Get<string>();
+
+// Use ManagedIdentityCredential explicitly in Azure-hosted environments and fall back to local developer credentials only in dev
+TokenCredential credentials = builder.Environment.IsDevelopment()
+    ? new ChainedTokenCredential(
+        new AzureCliCredential(),
+        new VisualStudioCredential(),
+        new AzureDeveloperCliCredential())
+    : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(azureClientId!));
 builder.Services.AddSingleton(credentials);
 
 string? keyvaultUri = builder.Configuration.GetSection(ConfigKeys.KeyVault.Uri).Get<string>();
@@ -57,7 +63,7 @@ if (keyvaultUri != null)
 
 builder.Services.AddTransient(sp =>
     new Microsoft.RetireaBot.Helpers.Azure.CredentialTokenHandler(
-        sp.GetRequiredService<DefaultAzureCredential>(),
+        sp.GetRequiredService<TokenCredential>(),
         new[] { "https://management.azure.com/.default" }));
 
 builder.Services.AddHttpClient<Microsoft.RetireaBot.Helpers.Azure.ManagementClient>(c =>

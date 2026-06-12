@@ -17,7 +17,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
         private GitHubClient? _coPilotClient;
 
         private readonly KeyClient? _keyClient;
-        private readonly DefaultAzureCredential _credentials;
+        private readonly TokenCredential _credentials;
         private readonly ILogger _logger;
 
         private DateTimeOffset _tokenExpiry = DateTimeOffset.MinValue;
@@ -25,7 +25,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
         private readonly AuthModeService _authModeSrv;
 
-        public CredentialProvider(ILoggerFactory loggerFactory, DefaultAzureCredential credentials, AuthModeService authModeService, KeyClient? keyClient)
+        public CredentialProvider(ILoggerFactory loggerFactory, TokenCredential credentials, AuthModeService authModeService, KeyClient? keyClient)
         {
             _authModeSrv = authModeService;
             _keyClient = keyClient;
@@ -106,7 +106,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
             KeyVaultSecurityKey securityKey = new KeyVaultSecurityKey(key.Id.ToString(), async (auth, resource, scope) =>
             {
                 var token = await _credentials.GetTokenAsync(
-                    new TokenRequestContext(new[] { resource + "/.default" }));
+                    new TokenRequestContext(new[] { resource + "/.default" }), CancellationToken.None);
                 return token.Token;
             });
 
