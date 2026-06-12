@@ -27,7 +27,7 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
         private readonly AuthModeService _authModeSrv;
         private readonly CertificateClient _certClient;
 
-        public CredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, DefaultAzureCredential credentials, AuthModeService authModeService, CertificateClient certClient)
+        public CredentialProvider(IConfiguration config, ILoggerFactory loggerFactory, TokenCredential credentials, AuthModeService authModeService, CertificateClient certClient)
         {
             _authModeSrv = authModeService;
             _logger = loggerFactory.CreateLogger<CredentialProvider>();
@@ -39,7 +39,7 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
             {
                 AuthMode.Certificate => CreateCertificateCredentials().Result,
                 AuthMode.ClientSecret => new ClientSecretCredential(tenantId: _authModeSrv.GetTenantId(), clientId: _authModeSrv.GetClientId(), clientSecret: _authModeSrv.GetClientSecret()),
-                AuthMode.ManagedIdentity => new DefaultAzureCredential(new DefaultAzureCredentialOptions { ManagedIdentityClientId = _authModeSrv.GetClientId() }),
+                AuthMode.ManagedIdentity => new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(_authModeSrv.GetClientId()!)),
                 AuthMode.BuiltIn => credentials,
                 AuthMode.PAT => null, // PAT doesn't use TokenCredential
                 _ => throw new InvalidOperationException("No supported Azure DevOps Credentials can be used. Please check your settings.")
