@@ -70,9 +70,20 @@ builder.Services.AddHttpClient<Microsoft.RetireaBot.Helpers.Azure.ManagementClie
 {
     c.BaseAddress = new Uri("https://management.azure.com/");
     c.Timeout = TimeSpan.FromSeconds(60);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("RetireaBot/1.0 (+https://github.com/microsoft/ProjectRetireabot)");
 })
     .AddHttpMessageHandler<Microsoft.RetireaBot.Helpers.Azure.CredentialTokenHandler>()
         .AddPolicyHandler(Policy<HttpResponseMessage>
+        .Handle<HttpRequestException>()
+        .OrResult(r => (int)r.StatusCode is 429 or >= 500)
+        .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
+
+builder.Services.AddHttpClient<Microsoft.RetireaBot.Helpers.Lifecycle.LifecycleClient>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(30);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("RetireaBot/1.0 (+https://github.com/microsoft/ProjectRetireabot)");
+})
+    .AddPolicyHandler(Policy<HttpResponseMessage>
         .Handle<HttpRequestException>()
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
         .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));

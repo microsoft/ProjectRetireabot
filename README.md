@@ -43,6 +43,8 @@ There are some key parameters you need to specify:
 | httpEndpointEnable           | `false`  | Whether the manual HTTP endpoint should be enabled. Default: false                                                                                                       |
 | httpEndpointOutput           | `false`  | Whether the manual HTTP endpoint should display extended information about its run Default: false                                                                        |
 | httpEndpointWhatIf           | `false`  | Whether the manual HTTP endpoint should allow users to run dry-runs Default: false                                                                                       |
+| lifecycleSignalsEnable       | `false`  | Whether RetireaBot should check and create advisories for services reaching end of life (supported services: AKS, PostgreSQL flexible server) Default: false             |
+| lifecycleWarningWindowDays   | `false`  | How many days before a published end-of-life date a deployed resource should start producing a work item. Default: 180                                                   |
 | timerTrigger                 | `false`  | NCRONTAB expression for the scheduled timer trigger. Default: `0 0 0 * * 1` (every Monday at 00:00 UTC)                                                                  |
 | gitHubCoPilotAssign          | `false`  | Whether GitHub CoPilot should be assigned to try and mitigate issues (requires a GitHub CoPilot license) Default: false                                                  |
 | resourceGroupRepositoryMap   | `false`  | If "perResourceGroup" mode is being used, these mappings decide which repositories issues are created based on their resource groups                                     |

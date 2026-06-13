@@ -1,11 +1,12 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc.RazorPages.Infrastructure;
+using Microsoft.RetireaBot.Models.Azure;
 using Moq;
 using Moq.Protected;
 
 namespace Microsoft.RetireaBot.Tests.Helpers.Azure
 {
-    public class ManagementClientTests
+    public class ManagementClientTest
     {
         private static Microsoft.RetireaBot.Helpers.Azure.ManagementClient BuildClient(Mock<HttpMessageHandler> handler)
         {
@@ -75,7 +76,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Azure
             var client = BuildClient(handler);
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => client.RunQueryAsync("sub-1", "some query"));
+                () => client.RunQueryAsync<RetirementData>("sub-1", "some query"));
         }
     }
 }

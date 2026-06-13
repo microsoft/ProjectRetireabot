@@ -115,6 +115,12 @@ param httpEndpointOutput bool = false
 @description('(Optional) Whether the manual HTTP endpoint should allow users to run dry-runs. Default false')
 param httpEndpointWhatIf bool = false
 
+@description('(Optional) Whether RetireaBot should check and create advisories for services reaching end of life (supported services: AKS, PostgreSQL flexible server) Default: false')
+param lifecycleSignalsEnable bool = false
+
+@description('(Optional) How many days before a published end-of-life date a deployed resource should start producing a work item. Default 180')
+param lifecycleWarningWindowDays int = 180
+
 @description('(Optional) The NCRONTAB expression that determines how often the timer-triggered function runs. Default: every Monday at 00:00 UTC ("0 0 0 * * 1"). See https://learn.microsoft.com/azure/azure-functions/functions-bindings-timer for syntax.')
 param timerTrigger string = '0 0 0 * * 1'
 
@@ -502,6 +508,14 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           {
             name: 'App__HTTPEndpointWhatIf'
             value: httpEndpointWhatIf
+          }
+          {
+            name: 'App__LifecycleSignalsEnable'
+            value: lifecycleSignalsEnable
+          }
+          {
+            name: 'App__LifecycleWarningWindowDays'
+            value: lifecycleWarningWindowDays
           }
           {
             name: 'App__TimerTrigger'
