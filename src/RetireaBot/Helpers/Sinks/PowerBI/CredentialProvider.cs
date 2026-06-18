@@ -16,7 +16,7 @@ namespace Microsoft.RetireaBot.Helpers.Sinks.PowerBI
 
         public CredentialProvider(
             ILoggerFactory loggerFactory,
-            DefaultAzureCredential credentials,
+            TokenCredential credentials,
             AuthModeService authModeService,
             CertificateClient? certClient = null)
         {
@@ -32,7 +32,7 @@ namespace Microsoft.RetireaBot.Helpers.Sinks.PowerBI
                     tenantId: authModeService.GetTenantId(),
                     clientId: authModeService.GetClientId(),
                     clientSecret: authModeService.GetClientSecret()),
-                AuthMode.ManagedIdentity => new ManagedIdentityCredential(authModeService.GetClientId()),
+                AuthMode.ManagedIdentity => new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(authModeService.GetClientId()!)),
                 AuthMode.BuiltIn => credentials,
                 _ => throw new InvalidOperationException("No supported PowerBI Credentials can be used. Please check your settings.")
             };
