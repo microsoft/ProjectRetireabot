@@ -19,11 +19,8 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("microsoft/ProjectRetireaBot")]
         public void CheckTargetRepository_ValidGitHubRepository_DoesNotThrow(string repo)
         {
-            var config = BuildConfig(new Dictionary<string, string?>
-            {
-                [ConfigKeys.App.TargetRepository] = repo
-            });
-            var exception = Record.Exception(() => PreflightChecks.CheckTargetRepository(config));
+            var vendor = Mock.Of<IVendorSettings>(v => v.Backend == WorkItemBackend.GitHub && v.TargetRepository == repo);
+            var exception = Record.Exception(() => PreflightChecks.CheckTargetRepository(vendor));
             Assert.Null(exception);
         }
 
@@ -35,12 +32,8 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("owner/ repo")]
         public void CheckTargetRepository_InvalidGitHubRepository_Throws(string repo)
         {
-            var config = BuildConfig(new Dictionary<string, string?>
-            {
-                [ConfigKeys.App.TargetRepository] = repo
-            });
-
-            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckTargetRepository(config));
+            var vendor = Mock.Of<IVendorSettings>(v => v.Backend == WorkItemBackend.GitHub && v.TargetRepository == repo);
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckTargetRepository(vendor));
         }
 
         [Theory]
@@ -49,11 +42,8 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("Another_repository")]
         public void CheckADOProjectName_ValidADOProjectName_DoesNotThrow(string repo)
         {
-            var config = BuildConfig(new Dictionary<string, string?>
-            {
-                [ConfigKeys.App.TargetRepository] = repo
-            });
-            var exception = Record.Exception(() => PreflightChecks.CheckADOProjectName(config));
+            var vendor = Mock.Of<IVendorSettings>(v => v.Backend == WorkItemBackend.AzureDevOps && v.TargetRepository == repo);
+            var exception = Record.Exception(() => PreflightChecks.CheckADOProjectName(vendor));
             Assert.Null(exception);
         }
 
@@ -65,12 +55,8 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("owner/repo")]
         public void CheckADOProjectName_InvalidADOProjectName_Throws(string repo)
         {
-            var config = BuildConfig(new Dictionary<string, string?>
-            {
-                [ConfigKeys.App.TargetRepository] = repo
-            });
-
-            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckADOProjectName(config));
+            var vendor = Mock.Of<IVendorSettings>(v => v.Backend == WorkItemBackend.AzureDevOps && v.TargetRepository == repo);
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckADOProjectName(vendor));
         }
 
 
@@ -171,14 +157,14 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("a", "b", "c-", "d-")]
         [InlineData("label with spaces", "tracking item", "spaced prefix ", "type prefix ")]
         [InlineData("special!@#$%^&*()", "tracking", "prefix-", "type-")]
-        public void CheckADOLables_ValidLabels_DoesNotThrows(string advisoryLabel, string advisoryParentLabel, string advisoryLabelPrefix, string parentLabelPrefix)
+        public void CheckADOLabels_ValidLabels_DoesNotThrows(string advisoryLabel, string advisoryParentLabel, string advisoryLabelPrefix, string parentLabelPrefix)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.AdvisoryLabel] = advisoryLabel,
-                [ConfigKeys.App.AdvisoryParentLabel] = advisoryParentLabel,
-                [ConfigKeys.App.AdvisoryLabelPrefix] = advisoryLabelPrefix,
-                [ConfigKeys.App.ParentLabelPrefix] = parentLabelPrefix
+                [ConfigKeys.AzureDevOps.AdvisoryLabel] = advisoryLabel,
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabel] = advisoryParentLabel,
+                [ConfigKeys.AzureDevOps.AdvisoryLabelPrefix] = advisoryLabelPrefix,
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabelPrefix] = parentLabelPrefix
             });
 
             var exception = Record.Exception(() => PreflightChecks.CheckADOLabels(config, Mock.Of<ILogger<PreflightChecksTest>>()));
@@ -193,14 +179,14 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("label\nwith\nnewlines", "tracking", "advisor-", "advisor-type-")]
         [InlineData("azure-advisor", "tracking\r\n", "advisor-", "advisor-type-")]
         [InlineData("azure-advisor", "tracking", "advisor-", "prefix\twith\ttabs")]
-        public void CheckADOLables_InvalidLabels_DoesNotThrows(string advisoryLabel, string advisoryParentLabel, string advisoryLabelPrefix, string parentLabelPrefix)
+        public void CheckADOLabels_InvalidLabels_DoesNotThrows(string advisoryLabel, string advisoryParentLabel, string advisoryLabelPrefix, string parentLabelPrefix)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.AdvisoryLabel] = advisoryLabel,
-                [ConfigKeys.App.AdvisoryParentLabel] = advisoryParentLabel,
-                [ConfigKeys.App.AdvisoryLabelPrefix] = advisoryLabelPrefix,
-                [ConfigKeys.App.ParentLabelPrefix] = parentLabelPrefix
+                [ConfigKeys.AzureDevOps.AdvisoryLabel] = advisoryLabel,
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabel] = advisoryParentLabel,
+                [ConfigKeys.AzureDevOps.AdvisoryLabelPrefix] = advisoryLabelPrefix,
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabelPrefix] = parentLabelPrefix
             });
 
             Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckADOLabels(config, Mock.Of<ILogger<PreflightChecksTest>>()));
@@ -214,10 +200,10 @@ namespace Microsoft.RetireaBot.Tests.Helpers
 
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.AdvisoryLabel] = longLabel,
-                [ConfigKeys.App.AdvisoryParentLabel] = "tracking",
-                [ConfigKeys.App.AdvisoryLabelPrefix] = "advisor-",
-                [ConfigKeys.App.ParentLabelPrefix] = "advisor-type-"
+                [ConfigKeys.AzureDevOps.AdvisoryLabel] = longLabel,
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabel] = "tracking",
+                [ConfigKeys.AzureDevOps.AdvisoryLabelPrefix] = "advisor-",
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabelPrefix] = "advisor-type-"
             });
 
             // Should not throw, but should warn
@@ -232,13 +218,133 @@ namespace Microsoft.RetireaBot.Tests.Helpers
 
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.AdvisoryLabel] = tooLongLabel,
-                [ConfigKeys.App.AdvisoryParentLabel] = "tracking",
-                [ConfigKeys.App.AdvisoryLabelPrefix] = "advisor-",
-                [ConfigKeys.App.ParentLabelPrefix] = "advisor-type-"
+                [ConfigKeys.AzureDevOps.AdvisoryLabel] = tooLongLabel,
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabel] = "tracking",
+                [ConfigKeys.AzureDevOps.AdvisoryLabelPrefix] = "advisor-",
+                [ConfigKeys.AzureDevOps.AdvisoryParentLabelPrefix] = "advisor-type-"
             });
 
             Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckADOLabels(config, Mock.Of<ILogger<PreflightChecksTest>>()));
+        }
+
+        [Fact]
+        public void CheckPowerBIConfiguration_ValidConfig_DoesNotThrow()
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = "dataset-123",
+                [ConfigKeys.PowerBI.TableName] = "Advisories",
+                [ConfigKeys.PowerBI.WriteMode] = "Append"
+            });
+
+            var exception = Record.Exception(() => PreflightChecks.CheckPowerBIConfiguration(config));
+            Assert.Null(exception);
+        }
+
+        [Theory]
+        [InlineData("Append")]
+        [InlineData("Snapshot")]
+        [InlineData("append")]
+        [InlineData("snapshot")]
+        [InlineData("APPEND")]
+        [InlineData("SNAPSHOT")]
+        public void CheckPowerBIConfiguration_ValidWriteMode_DoesNotThrow(string writeMode)
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = "dataset-123",
+                [ConfigKeys.PowerBI.TableName] = "Advisories",
+                [ConfigKeys.PowerBI.WriteMode] = writeMode
+            });
+
+            var exception = Record.Exception(() => PreflightChecks.CheckPowerBIConfiguration(config));
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public void CheckPowerBIConfiguration_NullWriteMode_DoesNotThrow()
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = "dataset-123",
+                [ConfigKeys.PowerBI.TableName] = "Advisories"
+            });
+
+            var exception = Record.Exception(() => PreflightChecks.CheckPowerBIConfiguration(config));
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public void CheckPowerBIConfiguration_MissingDatasetId_Throws()
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.TableName] = "Advisories",
+                [ConfigKeys.PowerBI.WriteMode] = "Append"
+            });
+
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckPowerBIConfiguration(config));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void CheckPowerBIConfiguration_EmptyOrWhitespaceDatasetId_Throws(string? datasetId)
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = datasetId,
+                [ConfigKeys.PowerBI.TableName] = "Advisories",
+                [ConfigKeys.PowerBI.WriteMode] = "Append"
+            });
+
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckPowerBIConfiguration(config));
+        }
+
+        [Fact]
+        public void CheckPowerBIConfiguration_MissingTableName_Throws()
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = "dataset-123",
+                [ConfigKeys.PowerBI.WriteMode] = "Append"
+            });
+
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckPowerBIConfiguration(config));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void CheckPowerBIConfiguration_EmptyOrWhitespaceTableName_Throws(string? tableName)
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = "dataset-123",
+                [ConfigKeys.PowerBI.TableName] = tableName,
+                [ConfigKeys.PowerBI.WriteMode] = "Append"
+            });
+
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckPowerBIConfiguration(config));
+        }
+
+        [Theory]
+        [InlineData("Invalid")]
+        [InlineData("overwrite")]
+        [InlineData("upsert")]
+        [InlineData("garbage")]
+        public void CheckPowerBIConfiguration_InvalidWriteMode_Throws(string writeMode)
+        {
+            var config = BuildConfig(new Dictionary<string, string?>
+            {
+                [ConfigKeys.PowerBI.DatasetId] = "dataset-123",
+                [ConfigKeys.PowerBI.TableName] = "Advisories",
+                [ConfigKeys.PowerBI.WriteMode] = writeMode
+            });
+
+            Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckPowerBIConfiguration(config));
         }
     }
 }

@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.RetireaBot.Models;
+using Microsoft.RetireaBot.Models.Sinks.PowerBI;
+using System.Collections;
 using System.Text.RegularExpressions;
 
 namespace Microsoft.RetireaBot.Helpers
@@ -21,21 +23,49 @@ namespace Microsoft.RetireaBot.Helpers
         [GeneratedRegex(@"[,;\p{Cc}\p{Cf}]")]
         private static partial Regex ADOInvalidTagPattern();
 
-        public static void StartPreflightChecks(IConfiguration config, IHost host, WorkItemBackend backend)
+        public static void StartPreflightChecks(IConfiguration config, IHost host, List<WorkItemBackend> workItems, List<DataSinkBackend> dataSinks)
         {
             ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PreflightChecks");
+            IVendorSettingsProvider vendorSettings = host.Services.GetRequiredService<IVendorSettingsProvider>();
 
-            switch (backend)
+            CheckOutputConfiguration(config, workItems, dataSinks);
+
+            foreach (WorkItemBackend backend in workItems)
             {
-                case WorkItemBackend.AzureDevOps:
-                    CheckADOOrganisationURL(config);
-                    CheckADOProjectName(config);
-                    CheckADOLabels(config, logger);
-                    break;
-                case WorkItemBackend.GitHub:
-                    CheckGitHubAuth(config, host, logger);
-                    CheckTargetRepository(config);
-                    break;
+                IVendorSettings vendor = vendorSettings.For(backend);
+
+                switch (backend)
+                {
+                    case WorkItemBackend.AzureDevOps:
+                        CheckADOOrganisationURL(config);
+                        CheckADOProjectName(vendor);
+                        CheckADOLabels(config, logger);
+                        break;
+                    case WorkItemBackend.GitHub:
+                        CheckGitHubAuth(config, host, logger);
+                        CheckTargetRepository(vendor);
+                        break;
+                }
+            }
+
+            foreach (DataSinkBackend backend in dataSinks)
+            {
+                switch (backend)
+                {
+                    case DataSinkBackend.PowerBI:
+                        CheckPowerBIConfiguration(config);
+                        break;
+                }
+            }
+        }
+
+        public static void CheckOutputConfiguration(IConfiguration config, List<WorkItemBackend> workItems, List<DataSinkBackend> dataSinks)
+        {
+            bool httpOutput = config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool>() && config.GetSection(ConfigKeys.App.HTTPEndpointOutput).Get<bool>();
+
+            if (httpOutput && workItems.Count == 0 && dataSinks.Count == 0)
+            {
+                throw new InvalidOperationException("No outputs are configured for RetireaBot. HTTPEndpointOutput enabled, at least one WorkItem or DataSink backend is required for normal operation.");
             }
         }
 
@@ -64,13 +94,11 @@ namespace Microsoft.RetireaBot.Helpers
             }
         }
 
-        public static void CheckTargetRepository(IConfiguration config)
+        public static void CheckTargetRepository(IVendorSettings vendor)
         {
-            string? targetRepo = config.GetSection(ConfigKeys.App.TargetRepository).Get<string>();
-
-            if (targetRepo == null || !RepoPattern().IsMatch(targetRepo))
+            if (string.IsNullOrEmpty(vendor.TargetRepository) || !RepoPattern().IsMatch(vendor.TargetRepository))
             {
-                throw new InvalidOperationException("App:TargetRepository is empty or not in the expected 'owner/repo' format");
+                throw new InvalidOperationException($"{vendor.Backend}:TargetRepository is empty or not in the expected 'owner/repo' format");
             }
         }
 
@@ -111,28 +139,26 @@ namespace Microsoft.RetireaBot.Helpers
             }
         }
 
-        public static void CheckADOProjectName(IConfiguration config)
+        public static void CheckADOProjectName(IVendorSettings vendor)
         {
-            string? targetProject = config.GetSection(ConfigKeys.App.TargetRepository).Get<string>();
-
-            if (string.IsNullOrEmpty(targetProject))
+            if (string.IsNullOrEmpty(vendor.TargetRepository))
             {
-                throw new InvalidOperationException("App:TargetRepository is not configured.");
+                throw new InvalidOperationException("AzureDevOps:TargetRepository is not configured.");
             }
 
-            if (!ADOProjectNamePattern().IsMatch(targetProject))
+            if (!ADOProjectNamePattern().IsMatch(vendor.TargetRepository))
             {
-                throw new InvalidOperationException($"App:TargetRepository '{targetProject}' is not a valid Azure DevOps project name.");
+                throw new InvalidOperationException($"AzureDevOps:TargetRepository '{vendor.TargetRepository}' is not a valid Azure DevOps project name.");
             }
         }
 
         public static void CheckADOLabels(IConfiguration config, ILogger logger)
         {
             Dictionary<string, string?> labelPairs = new Dictionary<string, string?>() {
-                { ConfigKeys.App.AdvisoryLabel, config.GetSection(ConfigKeys.App.AdvisoryLabel).Get<string>() },
-                { ConfigKeys.App.AdvisoryParentLabel,  config.GetSection(ConfigKeys.App.AdvisoryParentLabel).Get<string>() },
-                { ConfigKeys.App.AdvisoryLabelPrefix,config.GetSection(ConfigKeys.App.AdvisoryLabelPrefix).Get <string>() },
-                { ConfigKeys.App.ParentLabelPrefix, config.GetSection(ConfigKeys.App.ParentLabelPrefix).Get<string>() }
+                { ConfigKeys.AzureDevOps.AdvisoryLabel, config.GetSection(ConfigKeys.AzureDevOps.AdvisoryLabel).Get<string>() },
+                { ConfigKeys.AzureDevOps.AdvisoryParentLabel,  config.GetSection(ConfigKeys.AzureDevOps.AdvisoryParentLabel).Get<string>() },
+                { ConfigKeys.AzureDevOps.AdvisoryLabelPrefix, config.GetSection(ConfigKeys.AzureDevOps.AdvisoryLabelPrefix).Get<string>() },
+                { ConfigKeys.AzureDevOps.AdvisoryParentLabelPrefix, config.GetSection(ConfigKeys.AzureDevOps.AdvisoryParentLabelPrefix).Get<string>() }
             };
 
             foreach (var setting in labelPairs)
@@ -154,6 +180,22 @@ namespace Microsoft.RetireaBot.Helpers
                     logger.LogWarning("{labelSettingName} is {labelSettingLength} characters long which is near the 400 character limit imposed by Azure DevOps. This may cause issues with Work Item duplication checking and general reliabilty.", setting.Key, setting.Value.Length);
                 }
             }
+        }
+
+        public static void CheckPowerBIConfiguration(IConfiguration config)
+        {
+            string? datasetId = config.GetSection(ConfigKeys.PowerBI.DatasetId).Get<string>();
+            if (string.IsNullOrWhiteSpace(datasetId))
+                throw new InvalidOperationException("PowerBI:DatasetId is not configured.");
+
+            string? tableName = config.GetSection(ConfigKeys.PowerBI.TableName).Get<string>();
+            if (string.IsNullOrWhiteSpace(tableName))
+                throw new InvalidOperationException("PowerBI:TableName is not configured.");
+
+            string? writeMode = config.GetSection(ConfigKeys.PowerBI.WriteMode).Get<string>();
+            if (writeMode != null && !Enum.TryParse<WriteMode>(writeMode, ignoreCase: true, out _))
+                throw new InvalidOperationException(
+                    $"PowerBI:WriteMode '{writeMode}' is not valid. Expected: Append, Snapshot.");
         }
     }
 }

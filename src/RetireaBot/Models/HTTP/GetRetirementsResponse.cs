@@ -8,6 +8,7 @@ namespace Microsoft.RetireaBot.Models.HTTP
     {
         Unknown,
         Success,
+        Partial,
         Failure
     }
 
@@ -16,9 +17,8 @@ namespace Microsoft.RetireaBot.Models.HTTP
         public GetRetirementsResult Result { get; set; }
         public string ResultDescription { get; set; } = string.Empty;
         public List<Advisory>? Advisories { get; set; }
-        public List<WorkItem>? ExistingWorkItems { get; set; }
-        public List<WorkItem>? NewWorkItems { get; set; }
-        public List<ParentWorkItemResult>? ParentWorkItems { get; set; }
+        public List<BackendOutputResult> BackendOutputs { get; set; } = [];
+        public List<DataSinkOutputResult> SinkOutputs { get; set; } = [];
         public double TimeElapsed { get; set; }
         public bool WhatIf { get; set; }
     }

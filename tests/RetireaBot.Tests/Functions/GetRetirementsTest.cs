@@ -6,6 +6,9 @@ using Moq;
 using Moq.Protected;
 using Microsoft.RetireaBot.Functions;
 using Microsoft.RetireaBot.Helpers;
+using Microsoft.RetireaBot.Helpers.Lifecycle;
+using Microsoft.RetireaBot.Helpers.Orchestration;
+using Microsoft.RetireaBot.Helpers.Settings;
 using Microsoft.RetireaBot.Models;
 using Microsoft.RetireaBot.Models.Azure;
 using Microsoft.RetireaBot.Models.HTTP;
@@ -54,7 +57,8 @@ namespace Microsoft.RetireaBot.Tests.Functions
         {
             var defaults = new Dictionary<string, string?>
             {
-                [ConfigKeys.App.TargetRepository] = "owner/repo",
+                [ConfigKeys.GitHub.TargetRepository] = "owner/repo",
+                [ConfigKeys.AzureDevOps.TargetRepository] = "AdoProject",
                 [ConfigKeys.App.WorkItemScope] = "Monolithic",
                 [ConfigKeys.App.AssignGitHubCopilot] = "false",
                 [ConfigKeys.App.CreateParentWorkItems] = "true",
@@ -79,8 +83,16 @@ namespace Microsoft.RetireaBot.Tests.Functions
             };
             var mockMgmt = new Mock<Microsoft.RetireaBot.Helpers.Azure.ManagementClient>(mockHttpClient) { CallBase = false };
             var mockWorkItem = new Mock<IWorkItemClient>();
+            mockWorkItem.SetupGet(c => c.Backend).Returns(WorkItemBackend.GitHub);
 
-            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, mockWorkItem.Object, null!);
+            var vendorSettings = new VendorSettingsProvider(config, new[] { WorkItemBackend.GitHub, WorkItemBackend.AzureDevOps }, new[] { DataSinkBackend.NoOp });
+            var orchestrator = new BackendOrchestrator(loggerFactory, config, new[] { mockWorkItem.Object }, vendorSettings, mockMgmt.Object);
+            var sinkOrchestrator = new Mock<IDataSinkOrchestrator>();
+            sinkOrchestrator.Setup(x => x.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<DataSinkOutputResult>());
+            var lifecycleClient = new LifecycleClient(new HttpClient(new Mock<HttpMessageHandler>().Object), loggerFactory);
+
+            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, orchestrator, sinkOrchestrator.Object, lifecycleClient);
 
             return (function, mockWorkItem, mockMgmt);
         }
@@ -202,7 +214,8 @@ namespace Microsoft.RetireaBot.Tests.Functions
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.TargetRepository] = "example/repo",
+                [ConfigKeys.GitHub.TargetRepository] = "example/repo",
+                [ConfigKeys.AzureDevOps.TargetRepository] = "AdoProject",
                 [ConfigKeys.App.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
                 [ConfigKeys.App.CreateChildWorkItems] = "true",
             });
@@ -212,6 +225,7 @@ namespace Microsoft.RetireaBot.Tests.Functions
             SetupSubscriptionAndQueryResponse(handler, advisoryCount: 1);
 
             var mockWorkItemClient = new Mock<IWorkItemClient>();
+            mockWorkItemClient.SetupGet(c => c.Backend).Returns(WorkItemBackend.GitHub);
             mockWorkItemClient
                 .Setup(c => c.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "example/repo"))
                 .ReturnsAsync(new Dictionary<string, WorkItem>());
@@ -221,7 +235,13 @@ namespace Microsoft.RetireaBot.Tests.Functions
 
             var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
 
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object, null!);
+            var vendorSettings = new VendorSettingsProvider(config, new[] { WorkItemBackend.GitHub, WorkItemBackend.AzureDevOps }, new[] { DataSinkBackend.NoOp });
+            var orchestrator = new BackendOrchestrator(loggerFactory, config, new[] { mockWorkItemClient.Object }, vendorSettings, mgmtClient);
+            var sinkOrchestrator = new Mock<IDataSinkOrchestrator>();
+            sinkOrchestrator.Setup(x => x.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<DataSinkOutputResult>());
+            var lifecycleClient = new LifecycleClient(new HttpClient(new Mock<HttpMessageHandler>().Object), loggerFactory);
+            var sut = new GetRetirements(loggerFactory, config, mgmtClient, orchestrator, sinkOrchestrator.Object, lifecycleClient);
 
             await sut.GetRetirementsASync();
 
@@ -236,7 +256,8 @@ namespace Microsoft.RetireaBot.Tests.Functions
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
-                [ConfigKeys.App.TargetRepository] = "example/repo",
+                [ConfigKeys.GitHub.TargetRepository] = "example/repo",
+                [ConfigKeys.AzureDevOps.TargetRepository] = "AdoProject",
                 [ConfigKeys.App.WorkItemScope] = WorkItemScope.Monolithic.ToString(),
                 [ConfigKeys.App.CreateChildWorkItems] = "true",
             });
@@ -246,6 +267,7 @@ namespace Microsoft.RetireaBot.Tests.Functions
             SetupSubscriptionAndQueryResponse(handler, advisoryCount: 1);
 
             var mockWorkItemClient = new Mock<IWorkItemClient>();
+            mockWorkItemClient.SetupGet(c => c.Backend).Returns(WorkItemBackend.GitHub);
 
             mockWorkItemClient
                 .Setup(c => c.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), "example/repo"))
@@ -259,7 +281,13 @@ namespace Microsoft.RetireaBot.Tests.Functions
                 .ReturnsAsync(new List<(Advisory, WorkItem)>());
 
             var loggerFactory = LoggerFactory.Create(b => b.AddDebug());
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, mockWorkItemClient.Object, null!);
+            var vendorSettings = new VendorSettingsProvider(config, new[] { WorkItemBackend.GitHub, WorkItemBackend.AzureDevOps }, new[] { DataSinkBackend.NoOp });
+            var orchestrator = new BackendOrchestrator(loggerFactory, config, new[] { mockWorkItemClient.Object }, vendorSettings, mgmtClient);
+            var sinkOrchestrator = new Mock<IDataSinkOrchestrator>();
+            sinkOrchestrator.Setup(x => x.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<DataSinkOutputResult>());
+            var lifecycleClient = new LifecycleClient(new HttpClient(new Mock<HttpMessageHandler>().Object), loggerFactory);
+            var sut = new GetRetirements(loggerFactory, config, mgmtClient, orchestrator, sinkOrchestrator.Object, lifecycleClient);
 
             await sut.GetRetirementsASync();
 
