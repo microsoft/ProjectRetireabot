@@ -53,13 +53,15 @@ namespace Microsoft.RetireaBot.Models.Azure
                 Category = Category,
                 Impact = Impact,
                 ImpactedField = ImpactedField,
-                ImpactedValue = ImpactedValue,
+                ImpactedValue = !string.IsNullOrWhiteSpace(ImpactedValue) ? ImpactedValue : ExtractResourceName(ResourceId),
                 LastUpdated = DateTime.TryParse(LastUpdated, out var dt) ? dt : DateTime.MinValue,
                 RecommendationTypeId = ServiceID,
                 ShortDescription = new ShortDescription
                 {
-                    Problem = ShortDescriptionProblem ?? $"{RetirementFeatureName ?? "Azure service"} is scheduled for retirement{(RetirementDate != null ? $" on {RetirementDate}" : "")}",
-                    Solution = ShortDescriptionSolution ?? $"Migrate away from {RetirementFeatureName ?? "the retiring service"} before the retirement date."
+                    Problem = !string.IsNullOrWhiteSpace(ShortDescriptionProblem) ? ShortDescriptionProblem
+                        : $"{(string.IsNullOrWhiteSpace(RetirementFeatureName) ? "Azure service" : RetirementFeatureName)} is scheduled for retirement{(string.IsNullOrWhiteSpace(RetirementDate) ? "" : $" on {RetirementDate}")}",
+                    Solution = !string.IsNullOrWhiteSpace(ShortDescriptionSolution) ? ShortDescriptionSolution
+                        : $"Migrate away from {(string.IsNullOrWhiteSpace(RetirementFeatureName) ? "the retiring service" : RetirementFeatureName)} before the retirement date."
                 },
                 ExtendedProperties = new ExtendedProperties
                 {
@@ -72,5 +74,14 @@ namespace Microsoft.RetireaBot.Models.Azure
                 ResourceMetadata = new ResourceMetadata { ResourceId = ResourceId }
             }
         };
+
+        private static string ExtractResourceName(string resourceId)
+        {
+            if (string.IsNullOrWhiteSpace(resourceId)) return string.Empty;
+            int lastSlash = resourceId.LastIndexOf('/');
+            return lastSlash >= 0 && lastSlash < resourceId.Length - 1
+                ? resourceId[(lastSlash + 1)..]
+                : resourceId;
+        }
     }
 }

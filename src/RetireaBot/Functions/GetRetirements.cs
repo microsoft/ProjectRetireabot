@@ -27,8 +27,11 @@ namespace Microsoft.RetireaBot.Functions
 
         private readonly bool _lifecycleSignalsEnable;
         private readonly TimeSpan _lifecycleWarningWindow;
+        private readonly bool _includeResolvedAdvisories;
 
-        private const string _advisoryQuery = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\" | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
+        private const string _advisoryQueryBase = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\"";
+        private const string _advisoryQueryExcludeResolved = " | where tostring(properties.recommendationStatus) !in~ (\"Completed\", \"Resolved\")";
+        private const string _advisoryQueryProjection = " | extend resourceId = tostring(properties.resourceMetadata.resourceId) | project id, name, type, subscriptionId, resourceGroup, location, resourceId, ServiceID = tostring(properties.recommendationTypeId), impact = tostring(properties.impact), category = tostring(properties.category), impactedField = tostring(properties.impactedField), impactedValue = tostring(properties.impactedValue), lastUpdated = tostring(properties.lastUpdated), retirementDate = tostring(properties.extendedProperties.retirementDate), retirementFeatureName = tostring(properties.extendedProperties.retirementFeatureName), maturityLevel = tostring(properties.extendedProperties.maturityLevel), recommendationOfferingId = tostring(properties.extendedProperties.recommendationOfferingId), shortDescriptionProblem = tostring(properties.shortDescription.problem), shortDescriptionSolution = tostring(properties.shortDescription.solution)";
         private const string _aksResourceQuery = "resources | where type =~ 'microsoft.containerservice/managedclusters' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.kubernetesVersion)";
         private const string _postgreSqlResourceQuery = "resources | where type =~ 'microsoft.dbforpostgresql/flexibleservers' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.version)";
 
@@ -42,6 +45,7 @@ namespace Microsoft.RetireaBot.Functions
 
             _lifecycleSignalsEnable = config.GetSection(ConfigKeys.App.LifecycleSignalsEnable).Get<bool?>() ?? false;
             _lifecycleWarningWindow = TimeSpan.FromDays(config.GetSection(ConfigKeys.App.LifecycleWarningWindowDays).Get<int?>() ?? 180);
+            _includeResolvedAdvisories = config.GetSection(ConfigKeys.App.IncludeResolvedAdvisories).Get<bool?>() ?? false;
 
             _httpEndpointEnable = config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool?>() ?? false;
             _httpEndpointOutput = config.GetSection(ConfigKeys.App.HTTPEndpointOutput).Get<bool?>() ?? false;
@@ -149,9 +153,13 @@ namespace Microsoft.RetireaBot.Functions
 
             List<Advisory> advisories = new List<Advisory>();
 
+            string advisoryQuery = _includeResolvedAdvisories
+                ? _advisoryQueryBase + _advisoryQueryProjection
+                : _advisoryQueryBase + _advisoryQueryExcludeResolved + _advisoryQueryProjection;
+
             foreach (string sub in subs)
             {
-                QueryResult<RetirementData> data = await _managementClient.RunQueryAsync<RetirementData>(sub, _advisoryQuery);
+                QueryResult<RetirementData> data = await _managementClient.RunQueryAsync<RetirementData>(sub, advisoryQuery);
 
                 _logger.LogInformation("Subscription {SubscriptionId}: found {Count} retirement advisories", sub, data.Length);
 

@@ -5,12 +5,6 @@
             "default": "Information",
             "Microsoft": "Warning"
         },
-        "applicationInsights": {
-            "samplingSettings": {
-                "isEnabled": true,
-                "excludedTypes": "Request"
-            },
-            "enableLiveMetricsFilters": true
-        }
+        "telemetryMode": "OpenTelemetry"
     }
 }
