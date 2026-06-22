@@ -22,15 +22,24 @@ By default this function will run every Monday at 00:00 UTC (`0 0 0 * * 1`). Thi
 
 The preferred way to deploy this program is using the [Azure Developer CLI](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/install-azd), which handles both provisioning of the architecture and the deployment of the application to a target resource group.
 
+Or alternatively you can:
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fgithub.com%2Fmicrosoft%2FProjectRetireaBot%2Freleases%2Flatest%2Fdownload%2Fmain.json)
+
+Keep in mind, this will **only** deploy the architecture where azd will deploy everything.
+
+### Parameters
+
 Before provisioning the architecture, you need to specify parameters to define the behaviour of RetireaBot, copy the example json, and remove `.example`.
 
 There are some key parameters you need to specify:
 
 | Name                         | Required | Description                                                                                                                                                              |
 | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| dataSinkBackend              | `true`   | What data sink backends RetireaBot should use to push data to (Valid Options: '`PowerBI`') Multiple can be used at                                                       |
 | location                     | `true`   | The location where the resources are deployed                                                                                                                            |
 | targetRepository<sub>1</sub> | `true`   | Target project or repository to create work items on from advisories                                                                                                     |
-| workItemBackend              | `true`   | What work item backend RetireaBot should use to create work items in (Valid options: 'GitHub', 'AzureDevOps')                                                            |
+| workItemBackend              | `true`   | What work item backends RetireaBot should use to create work items in (Valid options: '`GitHub`', '`AzureDevOps`') Multiple can be used at once                          |
 | targetResourceGroup          | `false`  | The resource group RetireaBot should create issues for, leave blank any resource group                                                                                   |
 | advisoryLabel                | `false`  | What label should be attached to all work items to identify it was created by RetireaBot. Default: advisor                                                               |
 | advisoryParentLabel          | `false`  | What label should be attached to parent work items to identify them. Default: tracking                                                                                   |
@@ -56,7 +65,7 @@ There are some key parameters you need to specify:
 
 ### GitHub
 
-When `workItemBackend` is set to `GitHub`, you have some additional properties you can set.
+When `workItemBackend` includes `GitHub`, you have some additional properties you can set.
 
 | Name                 | Required           | Description                                                                                                                         |
 | -------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -76,7 +85,7 @@ Once you have configured RetireaBot with ensure your parameters file is called `
 
 ### Azure DevOps
 
-When `workItemBackend` is set to `AzureDevOps`, you have some additional properties to configure how RetireaBot interacts with ADO.
+When `workItemBackend` includes `AzureDevOps`, you have some additional properties to configure how RetireaBot interacts with ADO.
 
 | Name                       | Required            | Description                                                                                                   |
 | -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- |
@@ -95,3 +104,22 @@ When `workItemBackend` is set to `AzureDevOps`, you have some additional propert
 <sub>1</sub> Defaults of these values are set to the "Agile" Process. If you are using a different process for your project, you need to set these values to match, or work item creation will fail.
 
 If no authentication method is specified here (via Managed Identity, Certificate, Client Secret, or PAT), the Azure DevOps connector with use the associated Managed Identity used by the function app.
+
+### Power BI
+
+When `dataSinkBackend` includes `PowerBI`, you need to configure the following parameters for the Power BI data sink.
+
+| Name                 | Required            | Description                                                                                                                                    |
+| -------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| powerBIClientId      | `true`<sub>1</sub>  | The client ID of the app registration used to authenticate with Power BI                                                                       |
+| powerBITenantId      | `true`<sub>1</sub>  | The tenant ID of the app registration used to authenticate with Power BI                                                                       |
+| powerBIClientSecret  | `false`<sub>1</sub> | The client secret of the app registration used to authenticate with Power BI                                                                   |
+| powerBICertificateId | `false`<sub>1</sub> | The ID of the certificate of the app registration used to authenticate with Power BI                                                           |
+| powerBIWorkspaceId   | `true`              | The ID of the workspace the dataset is located in                                                                                              |
+| powerBIDatasetId     | `true`              | The ID of the dataset RetireaBot should push data into                                                                                         |
+| powerBITableName     | `true`              | The table name that RetireaBot should create rows for                                                                                          |
+| powerBIWriteMode     | `false`             | How RetireaBot should write to a PowerBI dataset. (Allowed: Append, Snapshot (deletes previous rows, before pushing new data)) Default: Append |
+
+<sub>1</sub> Only required when using a separate managed identity, client secret or certificate authentication is required.
+
+If no authentication method is specified here (via Managed Identity, Certificate, or Client Secret), the PowerBI connector with use the associated Managed Identity used by the function app.

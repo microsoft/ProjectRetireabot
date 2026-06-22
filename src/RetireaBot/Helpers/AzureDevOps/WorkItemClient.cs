@@ -30,16 +30,17 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 
         private const int MaxTagLength = 400;
 
-        public WorkItemClient(IConfiguration config, CredentialProvider credentialProvider, ILoggerFactory loggerFactory)
+        public WorkItemClient(IConfiguration config, CredentialProvider credentialProvider, ILoggerFactory loggerFactory, IVendorSettingsProvider vendorSettings)
         {
             _logger = loggerFactory.CreateLogger<WorkItemClient>();
 
             _credentialProvider = credentialProvider;
 
-            _advisoryLabel = config.GetSection(ConfigKeys.App.AdvisoryLabel).Get<string>() ?? "azure-advisor";
-            _advisoryParentLabel = config.GetSection(ConfigKeys.App.AdvisoryParentLabel).Get<string>() ?? "tracking";
-            _advisoryLabelPrefix = config.GetSection(ConfigKeys.App.AdvisoryLabelPrefix).Get<string>() ?? "advisor-";
-            _parentLabelPrefix = config.GetSection(ConfigKeys.App.ParentLabelPrefix).Get<string>() ?? "advisor-type-";
+            IVendorSettings s = vendorSettings.For(WorkItemBackend.AzureDevOps);
+            _advisoryLabel = s.AdvisoryLabel;
+            _advisoryParentLabel = s.AdvisoryParentLabel;
+            _advisoryLabelPrefix = s.AdvisoryLabelPrefix;
+            _parentLabelPrefix = s.AdvisoryParentLabelPrefix;
 
             _workItemDefaultAssignee = config.GetSection(ConfigKeys.AzureDevOps.WorkItemDefaultAssignee).Get<string>() ?? "";
             _workItemOpenState = config.GetSection(ConfigKeys.AzureDevOps.WorkItemOpenState).Get<string>() ?? "New";
@@ -469,5 +470,7 @@ namespace Microsoft.RetireaBot.Helpers.AzureDevOps
 
         private record ChildWorkItemReference(string ProjectName, string WorkItemId);
         private static string SanitiseWiQLInput(string variable) => variable.Replace("'", "''");
+
+        public WorkItemBackend Backend => WorkItemBackend.AzureDevOps;
     }
 }

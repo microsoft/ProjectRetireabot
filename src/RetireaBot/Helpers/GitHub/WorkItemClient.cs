@@ -20,16 +20,16 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
         private readonly CredentialProvider _credentialProvider;
         private readonly ILogger _logger;
 
-        public WorkItemClient(IConfiguration config, ILoggerFactory loggerFactory, CredentialProvider credentialProvider)
+        public WorkItemClient(ILoggerFactory loggerFactory, CredentialProvider credentialProvider, IVendorSettingsProvider vendorSettings)
         {
             _logger = loggerFactory.CreateLogger<WorkItemClient>();
             _credentialProvider = credentialProvider;
 
-
-            _advisoryLabel = config.GetSection(ConfigKeys.App.AdvisoryLabel).Get<string>() ?? "azure-advisor";
-            _advisoryParentLabel = config.GetSection(ConfigKeys.App.AdvisoryParentLabel).Get<string>() ?? "tracking";
-            _advisoryLabelPrefix = config.GetSection(ConfigKeys.App.AdvisoryLabelPrefix).Get<string>() ?? "advisor-";
-            _parentLabelPrefix = config.GetSection(ConfigKeys.App.ParentLabelPrefix).Get<string>() ?? "advisor-type-";
+            IVendorSettings s = vendorSettings.For(WorkItemBackend.GitHub);
+            _advisoryLabel = s.AdvisoryLabel;
+            _advisoryParentLabel = s.AdvisoryParentLabel;
+            _advisoryLabelPrefix = s.AdvisoryLabelPrefix;
+            _parentLabelPrefix = s.AdvisoryParentLabelPrefix;
         }
 
         private static WorkItem ToWorkItem(Issue issue)
@@ -449,5 +449,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
 
         [GeneratedRegex(@"Last Updated\n`(.*)+`")]
         private static partial Regex LastUpdatedFormat();
+
+        public WorkItemBackend Backend => WorkItemBackend.GitHub;
     }
 }

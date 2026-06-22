@@ -6,7 +6,9 @@ on:
 jobs:
     bicep-build:
         runs-on: ubuntu-latest
+        permissions:
+            contents: read
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v4
             - run: az bicep build --file infra/main.bicep
             - run: az bicep lint --file infra/main.bicep

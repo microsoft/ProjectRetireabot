@@ -23,7 +23,13 @@ param location string
   'AzureDevOps'
 ])
 @description('What work item backend RetireaBot should use to create work items in')
-param workItemBackend string = 'GitHub'
+param workItemBackend string[] = ['GitHub']
+
+@allowed([
+  'PowerBI'
+])
+@description('What data sink backend RetireaBot should use push data to')
+param dataSinkBackend string[] = []
 
 @secure()
 @description('The PAT that allows RetireaBot to interact with your GitHub repository.')
@@ -134,6 +140,35 @@ param workItemScope string = 'monolithic'
 @description('(Optional) If "perResourceGroup" is selected, these mappings decide which repositories issues are created based on their resource groups.')
 param resourceGroupRepositoryMap array = []
 
+@description('The client ID of the app registration used to authenticate with Power BI')
+param powerBIClientId string = ''
+
+@description('The tenant ID of the app registration used to authenticate with Power BI')
+param powerBITenantId string = ''
+
+@secure()
+@description('The client secret of the app registration used to authenticate with Power BI')
+param powerBIClientSecret string = ''
+
+@description('The ID of the certificate of the app registration used to authenticate with Power BI')
+param powerBICertificateId string = ''
+
+@description('The path of the certificate file (PFX/PEM) to be imported into the KeyVault for Power BI certificate auth')
+param powerBICertificatePath string = ''
+
+@description('The ID of the workspace the dataset is located in')
+param powerBIWorkspaceId string = ''
+
+@description('The ID of the dataset RetireaBot should push data into')
+param powerBIDatasetId string = ''
+
+@description('The table name that RetireaBot should create rows for')
+param powerBITableName string = ''
+
+@allowed(['Append', 'Snapshot'])
+@description('How RetireaBot should write to a PowerBI dataset. Default: Append')
+param powerBIWriteMode string = 'Append'
+
 var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var storageQueueDataContributorId = '974c5e8b-45b9-4653-ba55-5f855dd0fb88'
@@ -154,7 +189,14 @@ var deploymentSuffix = toLower(trim(replace(
   ''
 )))
 
-var gitHubCredentialValidation = empty(gitHubPAT) && empty(gitHubAppId) && empty(gitHubInstallId) && empty(gitHubPrivateKeyId) && workItemBackend == 'GitHub'
+var outputCheck = (!httpEndpointEnable && !httpEndpointOutput) && length(workItemBackend) == 0 && length(dataSinkBackend) == 0
+  ? fail('You need at least one output when trying to deploy this app. Minimum you need to have the HTTP endpoint enabled with output or at least one WorkItem/DataSink backend configured.')
+  : null
+
+var gitHubCredentialValidation = empty(gitHubPAT) && empty(gitHubAppId) && empty(gitHubInstallId) && empty(gitHubPrivateKeyId) && contains(
+    workItemBackend,
+    'GitHub'
+  )
   ? fail('You must provide at least one way of authenticating with GitHub (PAT or App)')
   : null
 
@@ -166,15 +208,18 @@ var gitHubAppParamsPopulated = [
 ]
 
 var gitHubParamCount = reduce(gitHubAppParamsPopulated, 0, (cur, next) => cur + next)
-var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4) && workItemBackend == 'GitHub'
+var gitHubParamCountValidation = !(gitHubParamCount == 0 || gitHubParamCount == 4) && contains(
+    workItemBackend,
+    'GitHub'
+  )
   ? fail('To use GitHub App authentication, you need to populate all required fields')
   : null
 
-var adoCredentialValidation = empty(adoPAT) && empty(adoClientId) && workItemBackend == 'AzureDevOps'
+var adoCredentialValidation = empty(adoPAT) && empty(adoClientId) && contains(workItemBackend, 'AzureDevOps')
   ? fail('You must provide at least one way of authenticating with Azure DevOps (PAT, or ClientId for managed identity/client secret/certificate auth)')
   : null
 
-var adoOrganisationUrlValidation = empty(adoOrganisationUrl) && workItemBackend == 'AzureDevOps'
+var adoOrganisationUrlValidation = empty(adoOrganisationUrl) && contains(workItemBackend, 'AzureDevOps')
   ? fail('You must provide the Azure DevOps organisation URL when using the AzureDevOps backend')
   : null
 
@@ -203,7 +248,10 @@ resource vault 'Microsoft.KeyVault/vaults@2021-10-01' = {
   }
 }
 
-resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(gitHubPAT) && workItemBackend == 'GitHub') {
+resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(gitHubPAT) && contains(
+  workItemBackend,
+  'GitHub'
+)) {
   parent: vault
   name: 'Github--PAT'
   properties: {
@@ -211,7 +259,10 @@ resource gitHubSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empt
   }
 }
 
-resource adoPATSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(adoPAT) && workItemBackend == 'AzureDevOps') {
+resource adoPATSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(adoPAT) && contains(
+  workItemBackend,
+  'AzureDevOps'
+)) {
   parent: vault
   name: 'AzureDevOps--PAT'
   properties: {
@@ -219,11 +270,25 @@ resource adoPATSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empt
   }
 }
 
-resource adoClientSecretSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(adoClientSecret) && workItemBackend == 'AzureDevOps') {
+resource adoClientSecretSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(adoClientSecret) && contains(
+  workItemBackend,
+  'AzureDevOps'
+)) {
   parent: vault
   name: 'AzureDevOps--ClientSecret'
   properties: {
     value: adoClientSecret
+  }
+}
+
+resource powerBIClientSecretSecret 'Microsoft.KeyVault/vaults/secrets@2025-05-01' = if (!empty(powerBIClientSecret) && contains(
+  dataSinkBackend,
+  'PowerBI'
+)) {
+  parent: vault
+  name: 'PowerBI--ClientSecret'
+  properties: {
+    value: powerBIClientSecret
   }
 }
 
@@ -405,7 +470,10 @@ resource roleAssignmentKeyVaultReader 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
-resource roleAssignmentKeyVaultCertificate 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (workItemBackend == 'AzureDevOps' && !empty(adoCertificateId)) {
+resource roleAssignmentKeyVaultCertificate 'Microsoft.Authorization/roleAssignments@2022-04-01' = if ((contains(
+  workItemBackend,
+  'AzureDevOps'
+) && !empty(adoCertificateId)) || (contains(dataSinkBackend, 'PowerBI') && !empty(powerBICertificateId))) {
   name: guid(subscription().id, vault.id, userAssignedIdentity.id, 'Key Vault Certificate User')
   scope: vault
   properties: {
@@ -415,7 +483,10 @@ resource roleAssignmentKeyVaultCertificate 'Microsoft.Authorization/roleAssignme
   }
 }
 
-resource roleAssignmentKeyVaultCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (workItemBackend == 'GitHub' && gitHubParamCount == 4) {
+resource roleAssignmentKeyVaultCrypto 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (contains(
+  workItemBackend,
+  'GitHub'
+) && gitHubParamCount == 4) {
   name: guid(subscription().id, vault.id, userAssignedIdentity.id, 'Key Vault Crypto User')
   scope: vault
   properties: {
@@ -474,28 +545,16 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: gitHubCoPilotAssign
           }
           {
-            name: 'App__AdvisoryLabel'
-            value: advisoryLabel
-          }
-          {
-            name: 'App__AdvisoryParentLabel'
-            value: advisoryParentLabel
-          }
-          {
-            name: 'App__AdvisoryLabelPrefix'
-            value: advisoryLabelPrefix
-          }
-          {
-            name: 'App__ParentLabelPrefix'
-            value: parentLabelPrefix
-          }
-          {
             name: 'App__CreateParentWorkItems'
             value: createParentWorkItems
           }
           {
             name: 'App__CreateChildWorkItems'
             value: createChildWorkItems
+          }
+          {
+            name: 'App__DataSinkBackend'
+            value: join(dataSinkBackend, ',')
           }
           {
             name: 'App__HTTPEndpointEnable'
@@ -522,20 +581,12 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: timerTrigger
           }
           {
-            name: 'App__TargetRepository'
-            value: targetRepository
-          }
-          {
             name: 'App__UseTriageRepoForUnmapped'
             value: useTriageRepoForUnmapped
           }
           {
-            name: 'App__UnmappedRepository'
-            value: unmappedRepository
-          }
-          {
             name: 'App__WorkItemBackend'
-            value: workItemBackend
+            value: join(workItemBackend, ',')
           }
           {
             name: 'App__WorkItemScope'
@@ -582,7 +633,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: '1'
           }
         ],
-        gitHubParamCountValidation == null || gitHubParamCount != 4 || workItemBackend != 'GitHub'
+        gitHubParamCountValidation == null || gitHubParamCount != 4 || !contains(workItemBackend, 'GitHub')
           ? []
           : [
               {
@@ -598,22 +649,40 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
                 value: gitHubPrivateKeyId
               }
             ],
-        empty(targetResourceGroup)
+        !contains(workItemBackend, 'GitHub')
           ? []
-          : [
-              { name: 'App__TargetResourceGroup', value: targetResourceGroup }
-            ],
-        workItemScope == 'monolithic'
-          ? []
-          : [
-              { name: 'App__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }
-            ],
-        workItemBackend != 'AzureDevOps'
+          : union(
+              [
+                { name: 'GitHub__AdvisoryLabel', value: advisoryLabel }
+                { name: 'GitHub__AdvisoryParentLabel', value: advisoryParentLabel }
+                { name: 'GitHub__AdvisoryLabelPrefix', value: advisoryLabelPrefix }
+                { name: 'GitHub__AdvisoryParentLabelPrefix', value: parentLabelPrefix }
+                { name: 'GitHub__TargetRepository', value: targetRepository }
+                { name: 'GitHub__UnmappedRepository', value: unmappedRepository }
+              ],
+              empty(targetResourceGroup) ? [] : [{ name: 'GitHub__TargetResourceGroup', value: targetResourceGroup }],
+              workItemScope == 'monolithic'
+                ? []
+                : [{ name: 'GitHub__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }]
+            ),
+        !contains(workItemBackend, 'AzureDevOps')
           ? []
           : union(
               [
                 { name: 'AzureDevOps__OrganisationUrl', value: adoOrganisationUrl }
+                { name: 'AzureDevOps__AdvisoryLabel', value: advisoryLabel }
+                { name: 'AzureDevOps__AdvisoryParentLabel', value: advisoryParentLabel }
+                { name: 'AzureDevOps__AdvisoryLabelPrefix', value: advisoryLabelPrefix }
+                { name: 'AzureDevOps__AdvisoryParentLabelPrefix', value: parentLabelPrefix }
+                { name: 'AzureDevOps__TargetRepository', value: targetRepository }
+                { name: 'AzureDevOps__UnmappedRepository', value: unmappedRepository }
               ],
+              empty(targetResourceGroup)
+                ? []
+                : [{ name: 'AzureDevOps__TargetResourceGroup', value: targetResourceGroup }],
+              workItemScope == 'monolithic'
+                ? []
+                : [{ name: 'AzureDevOps__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }],
               empty(adoClientId) ? [] : [{ name: 'AzureDevOps__ClientId', value: adoClientId }],
               empty(adoTenantId) ? [] : [{ name: 'AzureDevOps__TenantId', value: adoTenantId }],
               empty(adoCertificateId) ? [] : [{ name: 'AzureDevOps__CertificateId', value: adoCertificateId }],
@@ -627,6 +696,19 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
                 ? []
                 : [{ name: 'AzureDevOps__WorkItemClosedState', value: adoWorkItemClosedState }],
               empty(adoWorkItemType) ? [] : [{ name: 'AzureDevOps__WorkItemType', value: adoWorkItemType }]
+            ),
+        !contains(dataSinkBackend, 'PowerBI')
+          ? []
+          : union(
+              [
+                { name: 'PowerBI__WorkspaceId', value: powerBIWorkspaceId }
+                { name: 'PowerBI__DatasetId', value: powerBIDatasetId }
+                { name: 'PowerBI__TableName', value: powerBITableName }
+                { name: 'PowerBI__WriteMode', value: powerBIWriteMode }
+              ],
+              empty(powerBIClientId) ? [] : [{ name: 'PowerBI__ClientId', value: powerBIClientId }],
+              empty(powerBITenantId) ? [] : [{ name: 'PowerBI__TenantId', value: powerBITenantId }],
+              empty(powerBICertificateId) ? [] : [{ name: 'PowerBI__CertificateId', value: powerBICertificateId }]
             )
       )
     }
@@ -637,9 +719,11 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
   }
 }
 
-output WORK_ITEM_BACKEND string = workItemBackend
+output WORK_ITEM_BACKEND string = join(workItemBackend, ',')
 output GITHUB_PRIVATE_KEY_ID string = gitHubParamCount == 4 ? gitHubPrivateKeyId : ''
 output GITHUB_PRIVATE_KEY_PATH string = gitHubParamCount == 4 ? gitHubPrivateKeyPath : ''
 output AZURE_KEY_VAULT_NAME string = vault.name
 output ADO_CERTIFICATE_ID string = !empty(adoCertificateId) ? adoCertificateId : ''
 output ADO_CERTIFICATE_PATH string = !empty(adoCertificatePath) ? adoCertificatePath : ''
+output POWERBI_CERTIFICATE_ID string = !empty(powerBICertificateId) ? powerBICertificateId : ''
+output POWERBI_CERTIFICATE_PATH string = !empty(powerBICertificatePath) ? powerBICertificatePath : ''
