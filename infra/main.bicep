@@ -124,6 +124,9 @@ param httpEndpointWhatIf bool = false
 @description('(Optional) Whether RetireaBot should check and create advisories for services reaching end of life (supported services: AKS, PostgreSQL flexible server) Default: false')
 param lifecycleSignalsEnable bool = false
 
+@description('(Optional) Whether resolved or completed Azure Advisor advisories should be included when creating work items. Default: false')
+param includeResolvedAdvisories bool = false
+
 @description('(Optional) How many days before a published end-of-life date a deployed resource should start producing a work item. Default 180')
 param lifecycleWarningWindowDays int = 180
 
@@ -541,6 +544,10 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: applicationInsights.properties.ConnectionString
           }
           {
+            name: 'APPLICATIONINSIGHTS_AUTHENTICATION_STRING'
+            value: 'Authorization=AAD;ClientId=${userAssignedIdentity.properties.clientId}'
+          }
+          {
             name: 'App__AssignGitHubCopilot'
             value: gitHubCoPilotAssign
           }
@@ -571,6 +578,10 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
           {
             name: 'App__LifecycleSignalsEnable'
             value: lifecycleSignalsEnable
+          }
+          {
+            name: 'App__IncludeResolvedAdvisories'
+            value: includeResolvedAdvisories
           }
           {
             name: 'App__LifecycleWarningWindowDays'

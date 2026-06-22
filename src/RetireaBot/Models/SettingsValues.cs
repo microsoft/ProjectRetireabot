@@ -98,6 +98,7 @@ namespace Microsoft.RetireaBot.Models
             public const string LifecycleWarningWindowDays = "App:LifecycleWarningWindowDays";
             public const string UseTriageRepoForUnmapped = "App:UseTriageRepoForUnmapped";
             public const string WorkItemBackend = "App:WorkItemBackend";
+            public const string IncludeResolvedAdvisories = "App:IncludeResolvedAdvisories";
             public const string WorkItemScope = "App:WorkItemScope";
         }
 

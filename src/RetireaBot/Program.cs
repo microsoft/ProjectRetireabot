@@ -2,7 +2,6 @@ using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using Azure.Security.KeyVault.Keys;
-using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +11,7 @@ using Polly;
 using Microsoft.RetireaBot.Helpers;
 using Microsoft.RetireaBot.Models;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -21,23 +21,7 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 builder.ConfigureFunctionsWebApplication();
-builder.Services
-     .AddApplicationInsightsTelemetryWorkerService()
-     .ConfigureFunctionsApplicationInsights();
-
-builder.Logging.Services.Configure<LoggerFilterOptions>(options =>
-{
-    // The isolated worker SDK registers a default Warning filter under this provider name.
-    // Remove it so that host.json logLevel settings are respected.
-    var rulesToRemove = options.Rules
-        .Where(rule => rule.ProviderName == "Microsoft.Extensions.Logging.ApplicationInsights.ApplicationInsightsLoggerProvider")
-        .ToList();
-
-    foreach (var rule in rulesToRemove)
-    {
-        options.Rules.Remove(rule);
-    }
-});
+builder.Services.AddOpenTelemetry().UseAzureMonitor();
 
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 
@@ -75,16 +59,6 @@ builder.Services.AddHttpClient<Microsoft.RetireaBot.Helpers.Azure.ManagementClie
 })
     .AddHttpMessageHandler<Microsoft.RetireaBot.Helpers.Azure.CredentialTokenHandler>()
         .AddPolicyHandler(Policy<HttpResponseMessage>
-        .Handle<HttpRequestException>()
-        .OrResult(r => (int)r.StatusCode is 429 or >= 500)
-        .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
-
-builder.Services.AddHttpClient<Microsoft.RetireaBot.Helpers.Lifecycle.LifecycleClient>(c =>
-{
-    c.Timeout = TimeSpan.FromSeconds(30);
-    c.DefaultRequestHeaders.UserAgent.ParseAdd("RetireaBot/1.0 (+https://github.com/microsoft/ProjectRetireabot)");
-})
-    .AddPolicyHandler(Policy<HttpResponseMessage>
         .Handle<HttpRequestException>()
         .OrResult(r => (int)r.StatusCode is 429 or >= 500)
         .WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
