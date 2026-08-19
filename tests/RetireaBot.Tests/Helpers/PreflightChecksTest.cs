@@ -30,7 +30,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("noslash")]
         [InlineData("owner/repo/extra")]
         [InlineData("owner/ repo")]
-        public void CheckTargetRepository_InvalidGitHubRepository_Throws(string repo)
+        public void CheckTargetRepository_InvalidGitHubRepository_Throws(string? repo)
         {
             var vendor = Mock.Of<IVendorSettings>(v => v.Backend == WorkItemBackend.GitHub && v.TargetRepository == repo);
             Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckTargetRepository(vendor));
@@ -53,7 +53,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("web.config")]
         [InlineData("A+Totally+v@lid+repo")]
         [InlineData("owner/repo")]
-        public void CheckADOProjectName_InvalidADOProjectName_Throws(string repo)
+        public void CheckADOProjectName_InvalidADOProjectName_Throws(string? repo)
         {
             var vendor = Mock.Of<IVendorSettings>(v => v.Backend == WorkItemBackend.AzureDevOps && v.TargetRepository == repo);
             Assert.Throws<InvalidOperationException>(() => PreflightChecks.CheckADOProjectName(vendor));
@@ -104,7 +104,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("dev.azure.com/test-org")]
         [InlineData("h t t p s : // t e s t o r g . v i s u a l s t u d i o . c o m")]
         [InlineData("https://INVALID@ORG.$$$dev.azure.com")]
-        public void CheckADOOrganisationURL_InvalidADOOrganisationURL_Throws(string orgURL)
+        public void CheckADOOrganisationURL_InvalidADOOrganisationURL_Throws(string? orgURL)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
@@ -157,7 +157,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers
         [InlineData("a", "b", "c-", "d-")]
         [InlineData("label with spaces", "tracking item", "spaced prefix ", "type prefix ")]
         [InlineData("special!@#$%^&*()", "tracking", "prefix-", "type-")]
-        public void CheckADOLabels_ValidLabels_DoesNotThrows(string advisoryLabel, string advisoryParentLabel, string advisoryLabelPrefix, string parentLabelPrefix)
+        public void CheckADOLabels_ValidLabels_DoesNotThrows(string? advisoryLabel, string? advisoryParentLabel, string? advisoryLabelPrefix, string? parentLabelPrefix)
         {
             var config = BuildConfig(new Dictionary<string, string?>
             {
