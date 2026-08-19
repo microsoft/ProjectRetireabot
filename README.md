@@ -24,7 +24,7 @@ The preferred way to deploy this program is using the [Azure Developer CLI](http
 
 Or alternatively you can:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fgithub.com%2Fmicrosoft%2FProjectRetireaBot%2Freleases%2Flatest%2Fdownload%2Fmain.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fmicrosoft%2FProjectRetireaBot%2Fpublish%2Flatest%2Fmain.json)
 
 Keep in mind, this will **only** deploy the architecture where azd will deploy everything.
 
