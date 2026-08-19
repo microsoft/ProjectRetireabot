@@ -3,8 +3,9 @@ using Microsoft.Extensions.Logging;
 using Octokit;
 using Microsoft.RetireaBot.Models;
 using Microsoft.RetireaBot.Models.Azure;
-using Microsoft.RetireaBot.Models.HTTP;
+
 using System.Text.RegularExpressions;
+using Microsoft.RetireaBot.Domain;
 
 namespace Microsoft.RetireaBot.Helpers.GitHub
 {

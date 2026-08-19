@@ -12,6 +12,8 @@ using Microsoft.RetireaBot.Helpers;
 using Microsoft.RetireaBot.Models;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
+using Microsoft.RetireaBot.Middleware;
+using Microsoft.RetireaBot.Contracts;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -192,6 +194,11 @@ builder.Services.AddSingleton<Microsoft.RetireaBot.Helpers.Orchestration.IBacken
 
 builder.Services.AddSingleton<Microsoft.RetireaBot.Helpers.Orchestration.IDataSinkOrchestrator,
                               Microsoft.RetireaBot.Helpers.Orchestration.DataSinkOrchestrator>();
+
+builder.UseMiddleware<ApiVersionMiddleware>();
+
+builder.Services.AddSingleton<IResponseProjector, Microsoft.RetireaBot.Contracts.V2026_06_25.ResponseProjector>();
+builder.Services.AddSingleton<ResponseProjectorRegistry>();
 
 var app = builder.Build();
 
