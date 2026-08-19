@@ -1,14 +1,18 @@
-name: Publish Infrastructure Release
+name: Publish Infrastructure Template
 
 on:
   push:
     branches: [main]
 
+concurrency:
+  group: publish-infrastructure-template
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -16,13 +20,45 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build ARM template
-        run: az bicep build --file infra/main.bicep --outfile main.json
+        run: az bicep build --file infra/main.bicep --outfile "${{ runner.temp }}/main.json"
 
-      - name: Generate release tag
-        id: tag
-        run: echo "tag=v$(date +'%Y.%m.%d')-$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+      - name: Generate template version
+        id: version
+        shell: bash
+        run: |
+          commit_date="$(git show -s --format=%cs "$GITHUB_SHA")"
+          echo "value=v${commit_date//-/.}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Create release
-        run: gh release create ${{ steps.tag.outputs.tag }} main.json --notes "" --target ${{ github.sha }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: publish
+          path: published
+
+      - name: Publish template
+        working-directory: published
+        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          version_path="versions/$VERSION/main.json"
+
+          if [[ -f "$version_path" ]] && ! cmp --silent "${{ runner.temp }}/main.json" "$version_path"; then
+            echo "::error::Published version $VERSION already exists with different content."
+            exit 1
+          fi
+
+          mkdir -p latest "versions/$VERSION"
+          cp "${{ runner.temp }}/main.json" latest/main.json
+          cp "${{ runner.temp }}/main.json" "$version_path"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add latest/main.json "$version_path"
+
+          if git diff --cached --quiet; then
+            echo "Template $VERSION is already published."
+            exit 0
+          fi
+
+          git commit -m "Publish infrastructure template $VERSION"
+          git push origin HEAD:publish
