@@ -126,6 +126,21 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                 _logger.LogWarning("Attempting to use a non-CoPilot capable client, issue creation may fail");
             }
 
+            string[] repoParts = targetRepo.Split("/");
+
+            if (!whatIf)
+            {
+                // Pre-create the labels shared across advisories so concurrent issue creation
+                // doesn't race to auto-create the same brand-new label. GitHub returns a 422
+                // "invalid" validation error when two parallel requests create the same label.
+                var sharedLabels = new List<string> { _advisoryLabel };
+                sharedLabels.AddRange(advisories
+                    .Where(a => !string.IsNullOrWhiteSpace(a.Properties.Impact))
+                    .Select(a => a.Properties.Impact.ToLower()));
+
+                await EnsureLabelsExistAsync(ghClient, repoParts[0], repoParts[1], sharedLabels);
+            }
+
             var created = advisories.Select(async advisory =>
             {
                 await semaphore.WaitAsync();
@@ -143,8 +158,6 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                     newIssue.Labels.Add(advisory.Properties.Impact.ToLower());
 
                     if (assignCopilot) newIssue.Assignees.Add("copilot-swe-agent[bot]");
-
-                    string[] repoParts = targetRepo.Split("/");
 
                     if (whatIf)
                     {
@@ -180,6 +193,37 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
             return [.. results.Select((r, i) => (advisory: advisories[i], issue: r))
                   .Where(p => p.issue != null)
                   .Select(p => (p.advisory, p.issue!))];
+        }
+
+        /// <summary>
+        /// Ensures the given labels exist in the target repository, creating any that are missing.
+        /// Pre-creating shared labels sequentially avoids a race where concurrent issue creation
+        /// attempts to auto-create the same brand-new label, which GitHub rejects with a 422.
+        /// </summary>
+        private async Task EnsureLabelsExistAsync(GitHubClient ghClient, string owner, string repo, IEnumerable<string> labels)
+        {
+            foreach (var name in labels.Where(l => !string.IsNullOrWhiteSpace(l)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await ghClient.Issue.Labels.Get(owner, repo, name);
+                }
+                catch (NotFoundException)
+                {
+                    try
+                    {
+                        await ghClient.Issue.Labels.Create(owner, repo, new NewLabel(name, "ededed"));
+                    }
+                    catch (ApiValidationException)
+                    {
+                        // Label was created concurrently (or already exists) — safe to ignore.
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to ensure label {Label} exists in {Owner}/{Repo}", name, owner, repo);
+                }
+            }
         }
 
         private string GenerateIssueBody(Advisory advisory)
