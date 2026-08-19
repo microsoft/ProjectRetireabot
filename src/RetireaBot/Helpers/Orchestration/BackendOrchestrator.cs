@@ -51,7 +51,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             }
 
             IReadOnlyDictionary<string, string> subscriptionToMgMap =
-                _workItemScope == WorkItemScope.PerResourceGroup
+                _workItemScope == WorkItemScope.PerContainer
                     ? await ResolveSubscriptionToMgMapAsync(cancellationToken)
                     : new Dictionary<string, string>();
 
@@ -279,12 +279,12 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             Advisory advisory,
             IReadOnlyDictionary<string, string> subscriptionToMgMap)
         {
-            if (_workItemScope != WorkItemScope.PerResourceGroup)
+            if (_workItemScope != WorkItemScope.PerContainer)
             {
                 return vendor.TargetRepository;
             }
 
-            AzureRepositoryMap? mapping = vendor.TargetResourceGroupMapping.FirstOrDefault(m => m.Type switch
+            AzureRepositoryMap? mapping = vendor.TargetContainerMapping.FirstOrDefault(m => m.Type switch
             {
                 AzureContainerType.Subscription => string.Equals(m.Name, advisory.GetSubscriptionId(), StringComparison.OrdinalIgnoreCase),
                 AzureContainerType.ResourceGroup => string.Equals(m.Name, advisory.GetResourceGroupName(), StringComparison.OrdinalIgnoreCase),
@@ -306,7 +306,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
         private async Task<IReadOnlyDictionary<string, string>> ResolveSubscriptionToMgMapAsync(CancellationToken cancellationToken)
         {
             var mgIds = _workItemClients
-                .SelectMany(c => _vendorSettings.For(c.Backend).TargetResourceGroupMapping)
+                .SelectMany(c => _vendorSettings.For(c.Backend).TargetContainerMapping)
                 .Where(m => m.Type == AzureContainerType.ManagementGroup)
                 .Select(m => m.Name)
                 .Distinct(StringComparer.OrdinalIgnoreCase)

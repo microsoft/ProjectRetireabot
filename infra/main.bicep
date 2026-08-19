@@ -88,17 +88,17 @@ param targetRepository string = ''
 @description('(Optional) The resource group RetireaBot should create issues for, leave blank any resource group')
 param targetResourceGroup string = ''
 
-@description('(Optional) What label should be attached to all work items to identify it was created by RetireaBot. Default: advisor')
-param advisoryLabel string = ''
+@description('(Optional) What label should be attached to all work items to identify it was created by RetireaBot. Default: azure-advisor')
+param advisoryLabel string = 'azure-advisor'
 
 @description('(Optional) What label should be attached to parent work items to identify them. Default: tracking')
-param advisoryParentLabel string = ''
+param advisoryParentLabel string = 'tracking'
 
 @description('(Optional) What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-')
-param advisoryLabelPrefix string = ''
+param advisoryLabelPrefix string = 'advisor-'
 
 @description('(Optional) What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-')
-param parentLabelPrefix string = ''
+param parentLabelPrefix string = 'advisor-type-'
 
 @description('(Optional) Whether parent work items should be created when processing advisories to track child work items')
 param createParentWorkItems bool = true
@@ -106,10 +106,10 @@ param createParentWorkItems bool = true
 @description('(Optional) Whether child work items should be created when processing advisories')
 param createChildWorkItems bool = true
 
-@description('(Optional) Should unmapped resources have their work items created in the triage repository/target repository in perResourceGroup mode. Default: true')
+@description('(Optional) Should unmapped resources have their work items created in the triage repository/target repository in perContainer mode. Default: true')
 param useTriageRepoForUnmapped bool = true
 
-@description('(Optional) The repository work items should be created in when they are not mapped in perResourceGroup mode.')
+@description('(Optional) The repository work items should be created in when they are not mapped in perContainer mode.')
 param unmappedRepository string = ''
 
 @description('(Optional) Whether the manual HTTP endpoint is enabled. Default false')
@@ -136,12 +136,12 @@ param timerTrigger string = '0 0 0 * * 1'
 @description('(Optional) Whether GitHub CoPilot should be assigned to issues created by RetireaBot')
 param gitHubCoPilotAssign bool = false
 
-@allowed(['monolithic', 'perResourceGroup'])
+@allowed(['monolithic', 'perContainer'])
 @description('(Optional) Whether issues should be created in one "triage" repository or should be shared across multiple repositories with a parent issue in the repository. Default "monolithic"')
 param workItemScope string = 'monolithic'
 
-@description('(Optional) If "perResourceGroup" is selected, these mappings decide which repositories issues are created based on their resource groups.')
-param resourceGroupRepositoryMap array = []
+@description('(Optional) If "perContainer" is selected, these mappings decide which repositories issues are created in based on their containing resource group, subscription, or management group.')
+param containerRepositoryMap array = []
 
 @description('The client ID of the app registration used to authenticate with Power BI')
 param powerBIClientId string = ''
@@ -548,10 +548,6 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
             value: 'Authorization=AAD;ClientId=${userAssignedIdentity.properties.clientId}'
           }
           {
-            name: 'App__AssignGitHubCopilot'
-            value: gitHubCoPilotAssign
-          }
-          {
             name: 'App__CreateParentWorkItems'
             value: createParentWorkItems
           }
@@ -670,11 +666,12 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
                 { name: 'GitHub__AdvisoryParentLabelPrefix', value: parentLabelPrefix }
                 { name: 'GitHub__TargetRepository', value: targetRepository }
                 { name: 'GitHub__UnmappedRepository', value: unmappedRepository }
+                { name: 'GitHub__AssignCopilot', value: gitHubCoPilotAssign }
               ],
               empty(targetResourceGroup) ? [] : [{ name: 'GitHub__TargetResourceGroup', value: targetResourceGroup }],
               workItemScope == 'monolithic'
                 ? []
-                : [{ name: 'GitHub__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }]
+                : [{ name: 'GitHub__TargetContainerMapping', value: string(containerRepositoryMap) }]
             ),
         !contains(workItemBackend, 'AzureDevOps')
           ? []
@@ -693,7 +690,7 @@ module site 'br/public:avm/res/web/site:0.22.0' = {
                 : [{ name: 'AzureDevOps__TargetResourceGroup', value: targetResourceGroup }],
               workItemScope == 'monolithic'
                 ? []
-                : [{ name: 'AzureDevOps__TargetResourceGroupMapping', value: resourceGroupRepositoryMap }],
+                : [{ name: 'AzureDevOps__TargetContainerMapping', value: string(containerRepositoryMap) }],
               empty(adoClientId) ? [] : [{ name: 'AzureDevOps__ClientId', value: adoClientId }],
               empty(adoTenantId) ? [] : [{ name: 'AzureDevOps__TenantId', value: adoTenantId }],
               empty(adoCertificateId) ? [] : [{ name: 'AzureDevOps__CertificateId', value: adoCertificateId }],

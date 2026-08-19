@@ -11,7 +11,7 @@ namespace Microsoft.RetireaBot.Models
         string AdvisoryParentLabelPrefix { get; }
         WorkItemBackend Backend { get; }
         string TargetRepository { get; }
-        List<AzureRepositoryMap> TargetResourceGroupMapping { get; }
+        List<AzureRepositoryMap> TargetContainerMapping { get; }
         string? TargetResourceGroup { get; }
         string? UnmappedRepository { get; }
     }

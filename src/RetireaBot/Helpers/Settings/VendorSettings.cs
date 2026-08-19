@@ -22,8 +22,8 @@ namespace Microsoft.RetireaBot.Helpers.Settings
                                   && (config.GetSection($"{section}:AssignCopilot").Get<bool?>() ?? false);
             TargetRepository = config.GetSection($"{section}:TargetRepository").Get<string?>() ?? throw new InvalidOperationException($"{section}:TargetRepository is not configured.");
 
-            string? mappingJson = config.GetSection($"{section}:TargetResourceGroupMapping").Get<string>();
-            TargetResourceGroupMapping = !string.IsNullOrEmpty(mappingJson)
+            string? mappingJson = config.GetSection($"{section}:TargetContainerMapping").Get<string>();
+            TargetContainerMapping = !string.IsNullOrEmpty(mappingJson)
                 ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
                 : [];
 
@@ -38,7 +38,7 @@ namespace Microsoft.RetireaBot.Helpers.Settings
         public string AdvisoryParentLabelPrefix { get; }
         public bool AssignCopilot { get; }
         public string TargetRepository { get; }
-        public List<AzureRepositoryMap> TargetResourceGroupMapping { get; }
+        public List<AzureRepositoryMap> TargetContainerMapping { get; }
         public string? TargetResourceGroup { get; }
         public string? UnmappedRepository { get; }
     }

@@ -34,35 +34,73 @@ Before provisioning the architecture, you need to specify parameters to define t
 
 There are some key parameters you need to specify:
 
-| Name                         | Required | Description                                                                                                                                                              |
-| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| dataSinkBackend              | `true`   | What data sink backends RetireaBot should use to push data to (Valid Options: '`PowerBI`') Multiple can be used at                                                       |
-| location                     | `true`   | The location where the resources are deployed                                                                                                                            |
-| targetRepository<sub>1</sub> | `true`   | Target project or repository to create work items on from advisories                                                                                                     |
-| workItemBackend              | `true`   | What work item backends RetireaBot should use to create work items in (Valid options: '`GitHub`', '`AzureDevOps`') Multiple can be used at once                          |
-| targetResourceGroup          | `false`  | The resource group RetireaBot should create issues for, leave blank any resource group                                                                                   |
-| advisoryLabel                | `false`  | What label should be attached to all work items to identify it was created by RetireaBot. Default: advisor                                                               |
-| advisoryParentLabel          | `false`  | What label should be attached to parent work items to identify them. Default: tracking                                                                                   |
-| advisoryLabelPrefix          | `false`  | What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-                                                   |
-| parentLabelPrefix            | `false`  | What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-                                       |
-| createParentWorkItems        | `false`  | Whether parent work items should be created when processing advisories to track child work items                                                                         |
-| createChildWorkItems         | `false`  | Whether child work items should be created when processing advisories                                                                                                    |
-| deploymentName               | `false`  | A unique application/solution name for all resources in this deployment                                                                                                  |
-| deploymentUniqueText         | `false`  | Unique text value for the solution. This is used to ensure resource names are unique for global resource                                                                 |
-| httpEndpointEnable           | `false`  | Whether the manual HTTP endpoint should be enabled. Default: false                                                                                                       |
-| httpEndpointOutput           | `false`  | Whether the manual HTTP endpoint should display extended information about its run Default: false                                                                        |
-| httpEndpointWhatIf           | `false`  | Whether the manual HTTP endpoint should allow users to run dry-runs Default: false                                                                                       |
-| lifecycleSignalsEnable       | `false`  | Whether RetireaBot should check and create advisories for services reaching end of life (supported services: AKS, PostgreSQL flexible server) Default: false             |
-| lifecycleWarningWindowDays   | `false`  | How many days before a published end-of-life date a deployed resource should start producing a work item. Default: 180                                                   |
-| includeResolvedAdvisories    | `false`  | Whether resolved or completed Azure Advisor advisories should be included when creating work items. Default: false                                                       |
-| timerTrigger                 | `false`  | NCRONTAB expression for the scheduled timer trigger. Default: `0 0 0 * * 1` (every Monday at 00:00 UTC)                                                                  |
-| gitHubCoPilotAssign          | `false`  | Whether GitHub CoPilot should be assigned to try and mitigate issues (requires a GitHub CoPilot license) Default: false                                                  |
-| resourceGroupRepositoryMap   | `false`  | If "perResourceGroup" mode is being used, these mappings decide which repositories issues are created based on their resource groups                                     |
-| useTriageRepoForUnmapped     | `false`  | Should unmapped resources have their work items created in the triage repository/target repository in perResourceGroup mode. Default: true                               |
-| unmappedRepository           | `false`  | The repository work items should be created in when they are not mapped in perResourceGroup mode.                                                                        |
-| workItemScope                | `false`  | Whether issues should be created in one "triage" repository or should be shared across multiple repositories with a parent issue in the repository. Default "monolithic" |
+| Name                         | Required | Description                                                                                                                                                                      |
+| ---------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dataSinkBackend              | `true`   | What data sink backends RetireaBot should use to push data to (Valid Options: '`PowerBI`') Multiple can be used at                                                               |
+| location                     | `true`   | The location where the resources are deployed                                                                                                                                    |
+| targetRepository<sub>1</sub> | `true`   | Target project or repository to create work items on from advisories                                                                                                             |
+| workItemBackend              | `true`   | What work item backends RetireaBot should use to create work items in (Valid options: '`GitHub`', '`AzureDevOps`') Multiple can be used at once                                  |
+| targetResourceGroup          | `false`  | The resource group RetireaBot should create issues for, leave blank any resource group                                                                                           |
+| advisoryLabel                | `false`  | What label should be attached to all work items to identify it was created by RetireaBot. Default: advisor                                                                       |
+| advisoryParentLabel          | `false`  | What label should be attached to parent work items to identify them. Default: tracking                                                                                           |
+| advisoryLabelPrefix          | `false`  | What prefix should be applied to label that uniquely identifies a work item based on their advisory. Default: advisor-                                                           |
+| parentLabelPrefix            | `false`  | What prefix should be applied to label that uniquely identifies a parent work item based on their advisory. Default: advisor-type-                                               |
+| createParentWorkItems        | `false`  | Whether parent work items should be created when processing advisories to track child work items                                                                                 |
+| createChildWorkItems         | `false`  | Whether child work items should be created when processing advisories                                                                                                            |
+| deploymentName               | `false`  | A unique application/solution name for all resources in this deployment                                                                                                          |
+| deploymentUniqueText         | `false`  | Unique text value for the solution. This is used to ensure resource names are unique for global resource                                                                         |
+| httpEndpointEnable           | `false`  | Whether the manual HTTP endpoint should be enabled. Default: false                                                                                                               |
+| httpEndpointOutput           | `false`  | Whether the manual HTTP endpoint should display extended information about its run Default: false                                                                                |
+| httpEndpointWhatIf           | `false`  | Whether the manual HTTP endpoint should allow users to run dry-runs Default: false                                                                                               |
+| lifecycleSignalsEnable       | `false`  | Whether RetireaBot should check and create advisories for services reaching end of life (supported services: AKS, PostgreSQL flexible server) Default: false                     |
+| lifecycleWarningWindowDays   | `false`  | How many days before a published end-of-life date a deployed resource should start producing a work item. Default: 180                                                           |
+| includeResolvedAdvisories    | `false`  | Whether resolved or completed Azure Advisor advisories should be included when creating work items. Default: false                                                               |
+| timerTrigger                 | `false`  | NCRONTAB expression for the scheduled timer trigger. Default: `0 0 0 * * 1` (every Monday at 00:00 UTC)                                                                          |
+| gitHubCoPilotAssign          | `false`  | Whether GitHub CoPilot should be assigned to try and mitigate issues (requires a GitHub CoPilot license) Default: false                                                          |
+| containerRepositoryMap       | `false`  | If "perContainer" mode is being used, these mappings decide which repositories issues are created in based on their containing resource group, subscription, or management group |
+| useTriageRepoForUnmapped     | `false`  | Should unmapped resources have their work items created in the triage repository/target repository in perContainer mode. Default: true                                           |
+| unmappedRepository           | `false`  | The repository work items should be created in when they are not mapped in perContainer mode.                                                                                    |
+| workItemScope                | `false`  | Whether issues should be created in one "triage" repository or should be shared across multiple repositories with a parent issue in the repository. Default "monolithic"         |
 
-<sub>1</sub> When workItemScope is set to "perResourceGroup", the repository specified here will be treated as the parent repository
+<sub>1</sub> When workItemScope is set to "perContainer", the repository specified here will be treated as the parent repository
+
+#### Mapping containers to repositories
+
+When `workItemScope` is set to `perContainer`, `containerRepositoryMap` decides which repository a work item is created in based on the Azure container the advisory's resource belongs to. Supported containers are resource groups, subscriptions, and management groups.
+
+Each entry has the following properties:
+
+| Name         | Description                                                                                                                                                                                   |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`       | The identifier of the container to match. For `ResourceGroup` use the resource group name, for `Subscription` use the subscription ID, and for `ManagementGroup` use the management group ID. |
+| `type`       | The type of container to match. Valid options: `ResourceGroup`, `Subscription`, `ManagementGroup`.                                                                                            |
+| `repository` | The repository or project work items should be created in for resources in this container.                                                                                                    |
+
+For example:
+
+```json
+"containerRepositoryMap": {
+    "value": [
+        {
+            "name": "rg-production",
+            "type": "ResourceGroup",
+            "repository": "ExampleUser/ProductionRepo"
+        },
+        {
+            "name": "9d82d3a7-4bf7-49b4-9cbd-87a9d46d3423",
+            "type": "Subscription",
+            "repository": "ExampleUser/SubscriptionRepo"
+        },
+        {
+            "name": "b74c2c54-5e3f-4e94-9be5-88ebfce5ee9e",
+            "type": "ManagementGroup",
+            "repository": "ExampleUser/PlatformRepo"
+        }
+    ]
+}
+```
+
+Resources that don't match any mapping fall back to the triage/target repository, or to `unmappedRepository` when `useTriageRepoForUnmapped` is `false`.
 
 ### GitHub
 
