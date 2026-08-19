@@ -5,7 +5,7 @@ namespace Microsoft.RetireaBot.Models
     public enum WorkItemScope
     {
         Monolithic,
-        PerResourceGroup
+        PerContainer
     }
 
     public enum WorkItemBackend
@@ -36,7 +36,7 @@ namespace Microsoft.RetireaBot.Models
         public string TargetRepository => K();
         public string UnmappedRepository => K();
         public string TargetResourceGroup => K();
-        public string TargetResourceGroupMapping => K();
+        public string TargetContainerMapping => K();
     }
 
     public sealed class GitHubKeys : VendorKeys
