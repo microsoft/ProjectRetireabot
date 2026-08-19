@@ -1,4 +1,6 @@
-namespace Microsoft.RetireaBot.Models.HTTP
+using Microsoft.RetireaBot.Models;
+
+namespace Microsoft.RetireaBot.Domain
 {
     public class BackendOutputResult
     {

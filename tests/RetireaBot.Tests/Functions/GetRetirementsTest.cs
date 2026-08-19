@@ -11,7 +11,9 @@ using Microsoft.RetireaBot.Helpers.Orchestration;
 using Microsoft.RetireaBot.Helpers.Settings;
 using Microsoft.RetireaBot.Models;
 using Microsoft.RetireaBot.Models.Azure;
-using Microsoft.RetireaBot.Models.HTTP;
+
+using Microsoft.RetireaBot.Contracts;
+using Microsoft.RetireaBot.Domain;
 
 namespace Microsoft.RetireaBot.Tests.Functions
 {
@@ -20,37 +22,8 @@ namespace Microsoft.RetireaBot.Tests.Functions
         private static IConfiguration BuildConfig(Dictionary<string, string?> settings) =>
             new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
-        private static Advisory CreateAdvisory(string name = "test-advisory-1", string typeId = "type-1", string impact = "High")
-        {
-            return new Advisory
-            {
-                Id = $"/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Advisor/recommendations/{name}",
-                Name = name,
-                Type = "Microsoft.Advisor/recommendations",
-                Properties = new AdvisoryProperties
-                {
-                    Category = "HighAvailability",
-                    Impact = impact,
-                    ImpactedField = "Microsoft.Web/sites",
-                    ImpactedValue = "my-app-service",
-                    RecommendationTypeId = typeId,
-                    ShortDescription = new ShortDescription
-                    {
-                        Problem = "App Service Environment v2 retiring",
-                        Solution = "Migrate to App Service Environment v3"
-                    },
-                    ExtendedProperties = new ExtendedProperties
-                    {
-                        RetirementDate = "2025-08-31",
-                        RetirementFeatureName = "ASEv2"
-                    },
-                    ResourceMetadata = new ResourceMetadata
-                    {
-                        ResourceId = "/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Web/sites/my-app-service"
-                    }
-                }
-            };
-        }
+        private static Advisory CreateAdvisory(string name = "test-advisory-1", string typeId = "type-1", string impact = "High") =>
+            TestData.CreateAdvisory(name, typeId, impact);
 
         private static (GetRetirements function, Mock<IWorkItemClient> mockWorkItem, Mock<Microsoft.RetireaBot.Helpers.Azure.ManagementClient> mockMgmt) BuildFunction(
             Dictionary<string, string?>? configOverrides = null)
@@ -91,8 +64,9 @@ namespace Microsoft.RetireaBot.Tests.Functions
             sinkOrchestrator.Setup(x => x.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<DataSinkOutputResult>());
             var lifecycleClient = new LifecycleClient(new HttpClient(new Mock<HttpMessageHandler>().Object), loggerFactory);
+            var registry = new ResponseProjectorRegistry([]);
 
-            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, orchestrator, sinkOrchestrator.Object, lifecycleClient);
+            var function = new GetRetirements(loggerFactory, config, mockMgmt.Object, orchestrator, sinkOrchestrator.Object, lifecycleClient, registry);
 
             return (function, mockWorkItem, mockMgmt);
         }
@@ -154,8 +128,8 @@ namespace Microsoft.RetireaBot.Tests.Functions
 
             var result = await function.GetRetirementsASync();
 
-            Assert.Equal(Microsoft.RetireaBot.Models.HTTP.GetRetirementsResult.Failure, result.Result);
-            Assert.Contains("No subscriptions", result.ResultDescription);
+            Assert.Equal(GetRetirementsResult.Failure, result.Result);
+            Assert.Contains("No subscriptions", result.Description);
         }
 
         [Fact]
@@ -241,7 +215,8 @@ namespace Microsoft.RetireaBot.Tests.Functions
             sinkOrchestrator.Setup(x => x.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<DataSinkOutputResult>());
             var lifecycleClient = new LifecycleClient(new HttpClient(new Mock<HttpMessageHandler>().Object), loggerFactory);
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, orchestrator, sinkOrchestrator.Object, lifecycleClient);
+            var registry = new ResponseProjectorRegistry([]);
+            var sut = new GetRetirements(loggerFactory, config, mgmtClient, orchestrator, sinkOrchestrator.Object, lifecycleClient, registry);
 
             await sut.GetRetirementsASync();
 
@@ -287,7 +262,9 @@ namespace Microsoft.RetireaBot.Tests.Functions
             sinkOrchestrator.Setup(x => x.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<DataSinkOutputResult>());
             var lifecycleClient = new LifecycleClient(new HttpClient(new Mock<HttpMessageHandler>().Object), loggerFactory);
-            var sut = new GetRetirements(loggerFactory, config, mgmtClient, orchestrator, sinkOrchestrator.Object, lifecycleClient);
+            var registry = new ResponseProjectorRegistry([]);
+
+            var sut = new GetRetirements(loggerFactory, config, mgmtClient, orchestrator, sinkOrchestrator.Object, lifecycleClient, registry);
 
             await sut.GetRetirementsASync();
 

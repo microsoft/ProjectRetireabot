@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.RetireaBot.Domain;
 using Microsoft.RetireaBot.Helpers;
 using Microsoft.RetireaBot.Helpers.Orchestration;
 using Microsoft.RetireaBot.Helpers.Settings;
 using Microsoft.RetireaBot.Models;
 using Microsoft.RetireaBot.Models.Azure;
-using Microsoft.RetireaBot.Models.HTTP;
+
 using Moq;
 
 namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
@@ -125,7 +126,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
 
             var sut = CreateOrchestrator(config, githubClient, adoClient);
 
-            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g"), CreateAdvisory("ado-advisory", "type-a") }, whatIf: false);
+            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g"), CreateAdvisory("ado-advisory", "type-a") }, whatIf: false, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Equal(2, outputs.Count);
             Assert.Contains(outputs, x => x.BackendName == nameof(WorkItemBackend.GitHub));
@@ -163,7 +164,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
 
             var sut = CreateOrchestrator(config, githubClient, adoClient);
 
-            await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g"), CreateAdvisory("ado-advisory", "type-a") }, whatIf: false);
+            await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g"), CreateAdvisory("ado-advisory", "type-a") }, whatIf: false, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Single(githubParentCapture);
             Assert.Single(adoParentCapture);
@@ -215,9 +216,9 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
                 .ReturnsAsync([]);
 
             var sut = CreateOrchestrator(config, githubClient, adoClient);
-            var task = sut.RunAsync(new List<Advisory> { CreateAdvisory("advisory-a", "type-a") }, whatIf: false);
+            var task = sut.RunAsync(new List<Advisory> { CreateAdvisory("advisory-a", "type-a") }, whatIf: false, cancellationToken: TestContext.Current.CancellationToken);
 
-            await startedSignal.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await startedSignal.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken: TestContext.Current.CancellationToken);
             Assert.Equal(2, Volatile.Read(ref started));
 
             release.TrySetResult();
@@ -252,7 +253,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
             {
                 CreateAdvisory("a", "type-a"),
                 CreateAdvisory("b", "type-b")
-            }, whatIf: false);
+            }, whatIf: false, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Contains(outputs, x => x.BackendName == nameof(WorkItemBackend.GitHub) && x.Status == GetRetirementsResult.Failure);
             Assert.Contains(outputs, x => x.BackendName == nameof(WorkItemBackend.AzureDevOps) && x.Status == GetRetirementsResult.Partial);
@@ -278,7 +279,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
 
             var sut = CreateOrchestrator(config, githubClient, adoClient);
 
-            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("advisory-a", "type-a") }, whatIf: false);
+            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("advisory-a", "type-a") }, whatIf: false, TestContext.Current.CancellationToken);
 
             Assert.Contains(outputs, x => x.BackendName == nameof(WorkItemBackend.GitHub) && x.Status == GetRetirementsResult.Failure && x.Error == "GitHub exploded");
             Assert.Contains(outputs, x => x.BackendName == nameof(WorkItemBackend.AzureDevOps) && x.Status == GetRetirementsResult.Success);
@@ -302,7 +303,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
 
             var sut = CreateOrchestrator(config, githubClient);
 
-            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g") }, whatIf: false);
+            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g") }, whatIf: false, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Single(outputs);
             Assert.Equal(GetRetirementsResult.Success, outputs[0].Status);
@@ -328,7 +329,7 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
 
             var sut = CreateOrchestrator(config, githubClient);
 
-            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g") }, whatIf: false);
+            var outputs = await sut.RunAsync(new List<Advisory> { CreateAdvisory("github-advisory", "type-g") }, whatIf: false, cancellationToken: TestContext.Current.CancellationToken);
 
             Assert.Single(outputs);
             Assert.Equal(GetRetirementsResult.Success, outputs[0].Status);

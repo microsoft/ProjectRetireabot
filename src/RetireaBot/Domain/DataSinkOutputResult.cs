@@ -1,4 +1,4 @@
-namespace Microsoft.RetireaBot.Models.HTTP
+namespace Microsoft.RetireaBot.Domain
 {
     public class DataSinkOutputResult
     {

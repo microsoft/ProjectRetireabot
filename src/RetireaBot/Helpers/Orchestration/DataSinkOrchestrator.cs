@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.RetireaBot.Domain;
 using Microsoft.RetireaBot.Models;
 using Microsoft.RetireaBot.Models.Azure;
-using Microsoft.RetireaBot.Models.HTTP;
+
 
 namespace Microsoft.RetireaBot.Helpers.Orchestration
 {

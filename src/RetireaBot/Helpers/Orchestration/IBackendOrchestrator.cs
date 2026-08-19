@@ -1,5 +1,6 @@
+using Microsoft.RetireaBot.Domain;
 using Microsoft.RetireaBot.Models.Azure;
-using Microsoft.RetireaBot.Models.HTTP;
+
 
 namespace Microsoft.RetireaBot.Helpers.Orchestration
 {
