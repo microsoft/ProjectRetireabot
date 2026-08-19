@@ -1,15 +1,18 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.RetireaBot.Helpers.Orchestration;
 using Microsoft.RetireaBot.Models;
-using Microsoft.RetireaBot.Models.HTTP;
 using Microsoft.RetireaBot.Models.Azure;
 using System.Diagnostics;
 using System.Net;
 using Microsoft.RetireaBot.Helpers.Lifecycle;
 using Microsoft.RetireaBot.Models.Lifecycle;
+using Microsoft.RetireaBot.Contracts;
+using Microsoft.RetireaBot.Domain;
+using System.Globalization;
 
 namespace Microsoft.RetireaBot.Functions
 {
@@ -20,8 +23,8 @@ namespace Microsoft.RetireaBot.Functions
         private readonly Helpers.Azure.ManagementClient _managementClient;
         private readonly IBackendOrchestrator _orchestrator;
         private readonly IDataSinkOrchestrator _sinkOrchestrator;
+        private readonly ResponseProjectorRegistry _registry;
 
-        private readonly bool _httpEndpointEnable;
         private readonly bool _httpEndpointOutput;
         private readonly bool _httpEndpointWhatIf;
 
@@ -35,22 +38,24 @@ namespace Microsoft.RetireaBot.Functions
         private const string _aksResourceQuery = "resources | where type =~ 'microsoft.containerservice/managedclusters' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.kubernetesVersion)";
         private const string _postgreSqlResourceQuery = "resources | where type =~ 'microsoft.dbforpostgresql/flexibleservers' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.version)";
 
-        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IBackendOrchestrator orchestrator, IDataSinkOrchestrator sinkOrchestrator, LifecycleClient lifecycleClient)
+        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IBackendOrchestrator orchestrator, IDataSinkOrchestrator sinkOrchestrator, LifecycleClient lifecycleClient, ResponseProjectorRegistry projectorRegistry)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
             _lifecycleClient = lifecycleClient;
             _orchestrator = orchestrator;
             _sinkOrchestrator = sinkOrchestrator;
+            _registry = projectorRegistry;
 
             _lifecycleSignalsEnable = config.GetSection(ConfigKeys.App.LifecycleSignalsEnable).Get<bool?>() ?? false;
             _lifecycleWarningWindow = TimeSpan.FromDays(config.GetSection(ConfigKeys.App.LifecycleWarningWindowDays).Get<int?>() ?? 180);
             _includeResolvedAdvisories = config.GetSection(ConfigKeys.App.IncludeResolvedAdvisories).Get<bool?>() ?? false;
 
-            _httpEndpointEnable = config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool?>() ?? false;
             _httpEndpointOutput = config.GetSection(ConfigKeys.App.HTTPEndpointOutput).Get<bool?>() ?? false;
             _httpEndpointWhatIf = config.GetSection(ConfigKeys.App.HTTPEndpointWhatIf).Get<bool?>() ?? false;
         }
+
+        private static bool WantsCsv(HttpRequestData req) => req.Headers.TryGetValues("Accept", out var v) && string.Join(",", v).Contains("text/csv", StringComparison.OrdinalIgnoreCase);
 
         [Function("GetRetirements")]
         public async Task RunTimer([TimerTrigger("%App:TimerTrigger%")] TimerInfo timerInfo)
@@ -73,13 +78,31 @@ namespace Microsoft.RetireaBot.Functions
         }
 
         [Function("GetRetirementsManual")]
-        public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
+        public async Task<HttpResponseData> RunHttp([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req, FunctionContext ctx)
         {
-            if (!_httpEndpointEnable)
+            var response = req.CreateResponse();
+
+            string supportedVersions = string.Join(", ", _registry.SupportedVersions.Select(d => $"{d.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}{(d.IsPreview ? "-preview" : "")}"));
+            response.Headers.Add("api-supported-versions", supportedVersions);
+
+            var apiVersion = (ApiVersion)ctx.Items["ApiVersion"]!;   // set by middleware
+
+            if (!_registry.TryResolve(apiVersion, out var projector))
             {
-                _logger.LogDebug("Manual Endpoint hit when App:HTTPEndpointEnable is disabled");
-                return req.CreateResponse(HttpStatusCode.NotFound);
+                await response.WriteAsJsonAsync(new
+                {
+                    error = new
+                    {
+                        code = "InvalidApiVersion",
+                        message = $"The 'api-version' query parameter is required and must be a supported date. Supported versions: {supportedVersions}."
+                    }
+                });
+                response.StatusCode = HttpStatusCode.BadRequest;
+
+                return response;
             }
+
+            string mediaType = WantsCsv(req) ? "text/csv" : "application/json";
 
             bool whatIf = req.Query["whatIf"] == "true";
 
@@ -99,33 +122,38 @@ namespace Microsoft.RetireaBot.Functions
 
             try
             {
-                GetRetirementsResponse retireResult = await GetRetirementsASync(whatIf);
+                RetirementReport retireResult = await GetRetirementsASync(whatIf);
                 sw.Stop();
 
                 retireResult.TimeElapsed = sw.Elapsed.TotalSeconds;
 
-                var response = req.CreateResponse(retireResult.Result == GetRetirementsResult.Success ? HttpStatusCode.OK : HttpStatusCode.InternalServerError);
-                await response.WriteAsJsonAsync(_httpEndpointOutput ? retireResult : new GetRetirementsResponse() { Result = GetRetirementsResult.Success, ResultDescription = "Function ran successfully." });
+                response.StatusCode = retireResult.Result == GetRetirementsResult.Success ? HttpStatusCode.OK : HttpStatusCode.InternalServerError;
+
+                ProjectedResponse payload = _httpEndpointOutput ? await projector.Project(retireResult, mediaType) : await projector.Project(retireResult with { Advisories = [], BackendOutputs = [], SinkOutputs = [] }, mediaType);
+                response.Headers.Add("Content-Type", payload.ContentType);
+                await response.WriteBytesAsync(payload.Body.ToArray());
 
                 return response;
             }
             catch (Exception ex)
             {
                 _logger.LogError("Caught exception whilst handling request.\n{Exception}", ex);
-                var response = req.CreateResponse(HttpStatusCode.InternalServerError);
+                response.StatusCode = HttpStatusCode.InternalServerError;
 
                 sw.Stop();
 
-                GetRetirementsResponse retireResp = new GetRetirementsResponse() { Result = GetRetirementsResult.Failure, ResultDescription = "Error whilst completing action. Please check App Insights for more information." };
+                RetirementReport retireResult = new RetirementReport() { Result = GetRetirementsResult.Failure, Description = "Error whilst completing action. Please check App Insights for more information." };
 
                 if (_httpEndpointOutput)
                 {
-                    retireResp.ResultDescription = $"Caught exception whilst handling request.\n{ex}";
-                    retireResp.TimeElapsed = sw.Elapsed.TotalSeconds;
-                    retireResp.WhatIf = whatIf;
+                    retireResult.Description = $"Caught exception whilst handling request.\n{ex}";
+                    retireResult.TimeElapsed = sw.Elapsed.TotalSeconds;
+                    retireResult.WhatIf = whatIf;
                 }
 
-                await response.WriteAsJsonAsync(retireResp);
+                ProjectedResponse payload = await projector.Project(retireResult, mediaType);
+                response.Headers.Add("Content-Type", payload.ContentType);
+                await response.WriteBytesAsync(payload.Body.ToArray());
 
                 return response;
             }
@@ -139,7 +167,7 @@ namespace Microsoft.RetireaBot.Functions
             }
         }
 
-        public async Task<GetRetirementsResponse> GetRetirementsASync(bool whatIf = false)
+        public async Task<RetirementReport> GetRetirementsASync(bool whatIf = false)
         {
             _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
 
@@ -148,7 +176,7 @@ namespace Microsoft.RetireaBot.Functions
             {
                 _logger.LogWarning("No subscriptions returned; aborting.");
 
-                return new GetRetirementsResponse() { Result = GetRetirementsResult.Failure, ResultDescription = "No subscriptions returned", WhatIf = whatIf };
+                return new RetirementReport() { Result = GetRetirementsResult.Failure, Description = "No subscriptions returned", WhatIf = whatIf };
             }
 
             List<Advisory> advisories = new List<Advisory>();
@@ -182,7 +210,7 @@ namespace Microsoft.RetireaBot.Functions
             if (advisories.Count == 0)
             {
                 _logger.LogInformation("No retirement advisories found. Nothing to process.");
-                return new GetRetirementsResponse() { Result = GetRetirementsResult.Success, ResultDescription = "No retirement advisories found.", WhatIf = whatIf };
+                return new RetirementReport() { Result = GetRetirementsResult.Success, Description = "No retirement advisories found.", WhatIf = whatIf };
             }
 
             _logger.LogInformation("Found {Total} retirement advisories across {SubCount} subscription(s)", advisories.Count, subs.Length);
@@ -202,10 +230,10 @@ namespace Microsoft.RetireaBot.Functions
                 _ => "All backends failed. Check logs."
             };
 
-            GetRetirementsResponse response = new GetRetirementsResponse()
+            RetirementReport response = new RetirementReport()
             {
                 Result = overall,
-                ResultDescription = description,
+                Description = description,
                 WhatIf = whatIf,
             };
 
