@@ -7,6 +7,7 @@ import {
   GitHubOptions
   HttpEndpointOptions
   PowerBIOptions
+  ScanOptions
 } from 'types.bicep'
 
 param deploymentSuffix string
@@ -29,6 +30,7 @@ param gitHubOptions GitHubOptions
 param lifecycleSignalsOptions LifecycleSignalsOptions
 param httpEndpoint HttpEndpointOptions
 param powerBIOptions PowerBIOptions
+param scanOptions ScanOptions
 param gitHubParamCount int
 
 var functionServerFarmResourceName = 'asp-${deploymentSuffix}'
@@ -69,6 +71,11 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
       use32BitWorkerProcess: false
       appSettings: union(
         [
+          { name: 'Scan__Mode', value: scanOptions.mode }
+          { name: 'Scan__Scopes', value: string(scanOptions.mode == 'Explicit' ? scanOptions.scopes : []) }
+          { name: 'Scan__ResolvedScopes', value: string(scanOptions.scopes) }
+          { name: 'Scan__DeploymentSubscriptionId', value: subscription().subscriptionId }
+          { name: 'Scan__AssignReader', value: string(scanOptions.assignReader) }
           {
             name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
             value: applicationInsightsInstrumentationKey

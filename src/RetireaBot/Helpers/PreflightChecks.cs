@@ -27,6 +27,7 @@ namespace Microsoft.RetireaBot.Helpers
         {
             ILogger logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("PreflightChecks");
             IVendorSettingsProvider vendorSettings = host.Services.GetRequiredService<IVendorSettingsProvider>();
+            Settings.ScanConfiguration.Load(config, workItems.Select(vendorSettings.For));
 
             CheckOutputConfiguration(config, workItems, dataSinks);
 
@@ -63,7 +64,7 @@ namespace Microsoft.RetireaBot.Helpers
         {
             bool httpOutput = config.GetSection(ConfigKeys.App.HTTPEndpointEnable).Get<bool>() && config.GetSection(ConfigKeys.App.HTTPEndpointOutput).Get<bool>();
 
-            if (httpOutput && workItems.Count == 0 && dataSinks.Count == 0)
+            if (!httpOutput && workItems.Count == 0 && dataSinks.Count == 0)
             {
                 throw new InvalidOperationException("No outputs are configured for RetireaBot. HTTPEndpointOutput enabled, at least one WorkItem or DataSink backend is required for normal operation.");
             }

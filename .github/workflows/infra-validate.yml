@@ -10,7 +10,14 @@ jobs:
             contents: read
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - name: Install Bicep
+              run: |
+                  az bicep install --version v0.41.2
+                  echo "$HOME/.azure/bin" >> "$GITHUB_PATH"
             - run: az bicep build --file infra/main.bicep
             - run: az bicep build --file infra/portal.bicep
             - run: az bicep lint --file infra/main.bicep
             - run: az bicep lint --file infra/portal.bicep
+            - name: Test scan scope resolution and module wiring
+              shell: pwsh
+              run: ./infra/tests/Test-ScanScopes.ps1

@@ -11,6 +11,7 @@ using Microsoft.RetireaBot.Helpers.Orchestration;
 using Microsoft.RetireaBot.Helpers.Settings;
 using Microsoft.RetireaBot.Models;
 using Microsoft.RetireaBot.Models.Azure;
+using Microsoft.RetireaBot.Models.Lifecycle;
 
 using Microsoft.RetireaBot.Contracts;
 using Microsoft.RetireaBot.Domain;
@@ -135,6 +136,110 @@ namespace Microsoft.RetireaBot.Tests.Functions
             Assert.Contains("No subscriptions", result.Description);
         }
 
+        [Theory]
+        [InlineData("Explicit", false)]
+        [InlineData("Explicit", true)]
+        [InlineData("FromRouting", false)]
+        [InlineData("DeploymentSubscription", false)]
+        public async Task ConfiguredScan_BypassesDiscoveryAndFiltersBeforeAllOutputs(string mode, bool assignReader)
+        {
+            const string subscription = "11111111-1111-1111-1111-111111111111";
+            const string otherSubscription = "22222222-2222-2222-2222-222222222222";
+            const string group = $"/subscriptions/{subscription}/resourceGroups/rg-one";
+            string[] scopes = [group, $"/subscriptions/{subscription}/resourceGroups/rg-two"];
+            var config = BuildConfig(new()
+            {
+                [ConfigKeys.Scan.Mode] = mode,
+                [ConfigKeys.Scan.Scopes] = JsonSerializer.Serialize(mode == "Explicit" ? scopes : []),
+                [ConfigKeys.Scan.AssignReader] = assignReader.ToString(),
+                [ConfigKeys.Scan.DeploymentSubscriptionId] = subscription,
+                [ConfigKeys.App.HTTPEndpointOutput] = "true",
+                [ConfigKeys.App.LifecycleSignalsEnable] = "true",
+                [ConfigKeys.App.WorkItemBackend] = mode == "FromRouting" ? "GitHub" : "",
+                [ConfigKeys.GitHub.TargetRepository] = "owner/triage",
+                [ConfigKeys.GitHub.WorkItemScope] = "PerContainer",
+                [ConfigKeys.GitHub.TargetContainerMapping] = JsonSerializer.Serialize(
+                    scopes.Select(scopeId => new { scopeId, target = "owner/repo" }))
+            });
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var httpClient = new HttpClient();
+            var management = new Mock<Microsoft.RetireaBot.Helpers.Azure.ManagementClient>(httpClient);
+            RetirementData[] recommendations =
+            [
+                RetirementDataFromAdvisory(CreateAdvisory("inside")),
+                RetirementDataFromAdvisory(CreateAdvisory("outside")),
+                RetirementDataFromAdvisory(CreateAdvisory("subscription-level")),
+                RetirementDataFromAdvisory(CreateAdvisory("cross-subscription")),
+                RetirementDataFromAdvisory(CreateAdvisory("missing-resource"))
+            ];
+            recommendations[0].ResourceId = group + "/providers/Microsoft.Web/sites/inside";
+            recommendations[1].ResourceId = group + "-extra/providers/Microsoft.Web/sites/outside";
+            recommendations[2].ResourceId = $"/subscriptions/{subscription}";
+            recommendations[3].ResourceId = $"/subscriptions/{otherSubscription}/resourceGroups/rg-one/providers/Microsoft.Web/sites/outside";
+            recommendations[4].ResourceId = "";
+            management.Setup(m => m.RunQueryAsync<RetirementData>(subscription, It.IsAny<string>()))
+                .ReturnsAsync(new QueryResult<RetirementData> { Data = recommendations.ToList(), Length = recommendations.Length });
+
+            var lifecycleHandler = new Mock<HttpMessageHandler>();
+            const string lifecycleTables = """
+                | Kubernetes version | Upstream release | AKS preview | AKS GA | End of life | Platform support |
+                | ------------------ | ---------------- | ----------- | ------ | ----------- | ---------------- |
+                | 1.30 | Apr 2024 | Jun 2024 | Jul 2024 | Aug 22, 2025 | Until 1.34 GA |
+
+                | PostgreSQL Version | What's New | Azure Standard Support Start Date | Azure Standard Support End Date |
+                | --- | --- | --- | --- |
+                | [PostgreSQL 13](https://example.com) | Release notes | 25-Sep-2020 | 14-Nov-2025 |
+                """;
+            lifecycleHandler.Protected().Setup<Task<HttpResponseMessage>>("SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(lifecycleTables) });
+            var lifecycle = new LifecycleClient(new HttpClient(lifecycleHandler.Object), loggerFactory);
+            var resources = new List<VersionedResource>
+            {
+                new() { Id = group + "/providers/Microsoft.ContainerService/managedClusters/aks", Name = "aks",
+                    Type = "microsoft.containerservice/managedclusters", SubscriptionId = subscription, ResourceGroup = "rg-one", Version = "1.30.0" },
+                new() { Id = group + "-extra/providers/Microsoft.ContainerService/managedClusters/outside", Name = "outside",
+                    Type = "microsoft.containerservice/managedclusters", SubscriptionId = subscription, ResourceGroup = "rg-one-extra", Version = "1.30.0" }
+            };
+            management.Setup(m => m.RunQueryAsync<VersionedResource>(subscription, It.Is<string>(q => q.Contains("managedclusters"))))
+                .ReturnsAsync(new QueryResult<VersionedResource> { Data = resources, Length = resources.Count });
+            var pgResources = resources.Select(resource => new VersionedResource
+            {
+                Id = resource.Id.Replace("Microsoft.ContainerService/managedClusters", "Microsoft.DBforPostgreSQL/flexibleServers"),
+                Name = resource.Name,
+                Type = "microsoft.dbforpostgresql/flexibleservers",
+                SubscriptionId = subscription,
+                ResourceGroup = resource.ResourceGroup,
+                Version = "13"
+            }).ToList();
+            management.Setup(m => m.RunQueryAsync<VersionedResource>(subscription, It.Is<string>(q => q.Contains("flexibleservers"))))
+                .ReturnsAsync(new QueryResult<VersionedResource> { Data = pgResources, Length = pgResources.Count });
+
+            var backend = new Mock<IBackendOrchestrator>();
+            backend.Setup(b => b.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            var sink = new Mock<IDataSinkOrchestrator>();
+            sink.Setup(s => s.RunAsync(It.IsAny<List<Advisory>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+            var function = new GetRetirements(loggerFactory, config, management.Object, backend.Object, sink.Object, lifecycle,
+                new ResponseProjectorRegistry([]));
+
+            var report = await function.GetRetirementsASync();
+
+            int expected = mode == "DeploymentSubscription" ? 7 : 3;
+            Assert.Equal(expected, report.Advisories.Count);
+            backend.Verify(b => b.RunAsync(It.Is<List<Advisory>>(a => a.Count == expected), false, It.IsAny<CancellationToken>()), Times.Once);
+            sink.Verify(s => s.RunAsync(It.Is<List<Advisory>>(a => a.Count == expected), false, It.IsAny<CancellationToken>()), Times.Once);
+            Assert.DoesNotContain(report.Advisories, a => a.Name == "cross-subscription" || a.Name == "missing-resource");
+            management.Verify(m => m.GetSubscriptionsAsync(), Times.Never);
+            management.Verify(m => m.RunQueryAsync<RetirementData>(subscription,
+                It.Is<string>(q => q.Contains("tolower(resourceId)") && q.Contains(mode == "DeploymentSubscription"
+                    ? $"/subscriptions/{subscription}" : group.ToLowerInvariant()))), Times.Once);
+            management.Verify(m => m.RunQueryAsync<VersionedResource>(subscription,
+                It.Is<string>(q => q.Contains("tolower(id)"))), Times.Exactly(2));
+            management.VerifyNoOtherCalls();
+        }
+
         [Fact]
         public async Task GetRetirementsASync_WhatIf_DoesNotCreateRealIssues()
         {
@@ -173,6 +278,25 @@ namespace Microsoft.RetireaBot.Tests.Functions
 
             mockWorkItem.Verify(m => m.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), true), Times.Once);
             mockWorkItem.Verify(m => m.FindOrCreateParentAsync(It.IsAny<string>(), It.IsAny<Advisory>(), It.IsAny<Dictionary<string, List<WorkItem>>>(), It.IsAny<string>(), true), Times.Once);
+        }
+
+        [Fact]
+        public async Task ConfiguredScan_QueryFailureDoesNotFallBackToSubscriptionDiscovery()
+        {
+            const string subscription = "11111111-1111-1111-1111-111111111111";
+            var (function, workItems, management) = BuildFunction(new()
+            {
+                [ConfigKeys.Scan.Mode] = "Explicit",
+                [ConfigKeys.Scan.Scopes] = JsonSerializer.Serialize(new[] { $"/subscriptions/{subscription}/resourceGroups/rg-one" }),
+                [ConfigKeys.Scan.AssignReader] = "false"
+            });
+            management.Setup(m => m.RunQueryAsync<RetirementData>(subscription, It.IsAny<string>()))
+                .ThrowsAsync(new HttpRequestException("Forbidden", null, HttpStatusCode.Forbidden));
+
+            await Assert.ThrowsAsync<HttpRequestException>(() => function.GetRetirementsASync());
+
+            management.Verify(m => m.GetSubscriptionsAsync(), Times.Never);
+            workItems.Verify(m => m.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never);
         }
 
         [Fact]

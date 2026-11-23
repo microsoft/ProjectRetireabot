@@ -139,6 +139,40 @@ namespace Microsoft.RetireaBot.Tests.Helpers.Orchestration
         }
 
         [Fact]
+        public async Task RunAsync_ScopeIdsRouteSameNamedGroupsByAffectedResourceSubscription()
+        {
+            const string first = "11111111-1111-1111-1111-111111111111";
+            const string second = "22222222-2222-2222-2222-222222222222";
+            var config = BuildConfig(new()
+            {
+                [ConfigKeys.GitHub.WorkItemScope] = "PerContainer",
+                [ConfigKeys.GitHub.CreateParentWorkItems] = "false",
+                [ConfigKeys.GitHub.TargetContainerMapping] = System.Text.Json.JsonSerializer.Serialize(new[]
+                {
+                    new { scopeId = $"/subscriptions/{first}/resourceGroups/shared", target = "owner/first" },
+                    new { scopeId = $"/subscriptions/{second}/resourceGroups/shared", target = "owner/second" }
+                })
+            });
+            var client = new Mock<IWorkItemClient>();
+            client.SetupGet(c => c.Backend).Returns(WorkItemBackend.GitHub);
+            client.Setup(c => c.FindExistingByAdvisoryAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>()))
+                .ReturnsAsync(new Dictionary<string, WorkItem>());
+            client.Setup(c => c.CreateBatchAsync(It.IsAny<List<Advisory>>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>()))
+                .ReturnsAsync([]);
+            var one = CreateAdvisory("one", "type");
+            var two = CreateAdvisory("two", "type");
+            one.Properties.ResourceMetadata.ResourceId = $"/subscriptions/{first}/resourceGroups/shared/providers/Microsoft.Web/sites/one";
+            two.Properties.ResourceMetadata.ResourceId = $"/subscriptions/{second}/resourceGroups/shared/providers/Microsoft.Web/sites/two";
+
+            await CreateOrchestrator(config, client).RunAsync([one, two], false, TestContext.Current.CancellationToken);
+
+            client.Verify(c => c.CreateBatchAsync(It.Is<List<Advisory>>(a => a.Count == 1 && a[0].Name == "one"),
+                "owner/first", false, false), Times.Once);
+            client.Verify(c => c.CreateBatchAsync(It.Is<List<Advisory>>(a => a.Count == 1 && a[0].Name == "two"),
+                "owner/second", false, false), Times.Once);
+        }
+
+        [Fact]
         // Ensures parent creation receives only the children created for that same backend.
         public async Task RunAsync_PassesOnlyThatBackendChildItemsToParentCreation()
         {

@@ -107,5 +107,14 @@ namespace Microsoft.RetireaBot.Models
         {
             public const string Uri = "KeyVault:Uri";
         }
+
+        public static class Scan
+        {
+            public const string Mode = "Scan:Mode";
+            public const string Scopes = "Scan:Scopes";
+            public const string ResolvedScopes = "Scan:ResolvedScopes";
+            public const string AssignReader = "Scan:AssignReader";
+            public const string DeploymentSubscriptionId = "Scan:DeploymentSubscriptionId";
+        }
     }
 }

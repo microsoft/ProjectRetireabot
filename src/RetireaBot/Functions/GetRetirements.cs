@@ -13,6 +13,8 @@ using Microsoft.RetireaBot.Models.Lifecycle;
 using Microsoft.RetireaBot.Contracts;
 using Microsoft.RetireaBot.Domain;
 using System.Globalization;
+using Microsoft.RetireaBot.Helpers.Settings;
+using Microsoft.RetireaBot.Helpers.Azure;
 
 namespace Microsoft.RetireaBot.Functions
 {
@@ -31,6 +33,7 @@ namespace Microsoft.RetireaBot.Functions
         private readonly bool _lifecycleSignalsEnable;
         private readonly TimeSpan _lifecycleWarningWindow;
         private readonly bool _includeResolvedAdvisories;
+        private readonly ResolvedScanOptions? _scan;
 
         private const string _advisoryQueryBase = "advisorresources | where properties.extendedProperties.recommendationSubCategory == \"ServiceUpgradeAndRetirement\" | where tostring(properties.category) has \"HighAvailability\"";
         private const string _advisoryQueryExcludeResolved = " | where tostring(properties.recommendationStatus) !in~ (\"Completed\", \"Resolved\")";
@@ -38,7 +41,7 @@ namespace Microsoft.RetireaBot.Functions
         private const string _aksResourceQuery = "resources | where type =~ 'microsoft.containerservice/managedclusters' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.kubernetesVersion)";
         private const string _postgreSqlResourceQuery = "resources | where type =~ 'microsoft.dbforpostgresql/flexibleservers' | project id, name, type, subscriptionId, resourceGroup, location, version = tostring(properties.version)";
 
-        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IBackendOrchestrator orchestrator, IDataSinkOrchestrator sinkOrchestrator, LifecycleClient lifecycleClient, ResponseProjectorRegistry projectorRegistry)
+        public GetRetirements(ILoggerFactory loggerFactory, IConfiguration config, Helpers.Azure.ManagementClient client, IBackendOrchestrator orchestrator, IDataSinkOrchestrator sinkOrchestrator, LifecycleClient lifecycleClient, ResponseProjectorRegistry projectorRegistry, IVendorSettingsProvider? vendorSettings = null)
         {
             _logger = loggerFactory.CreateLogger<GetRetirements>();
             _managementClient = client;
@@ -46,6 +49,11 @@ namespace Microsoft.RetireaBot.Functions
             _orchestrator = orchestrator;
             _sinkOrchestrator = sinkOrchestrator;
             _registry = projectorRegistry;
+            var activeBackends = (config[ConfigKeys.App.WorkItemBackend] ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(value => Enum.Parse<WorkItemBackend>(value, true)).Distinct().ToArray();
+            var settings = vendorSettings ?? new VendorSettingsProvider(config, activeBackends, []);
+            _scan = ScanConfiguration.Load(config, activeBackends.Select(settings.For));
 
             _lifecycleSignalsEnable = config.GetSection(ConfigKeys.App.LifecycleSignalsEnable).Get<bool?>() ?? false;
             _lifecycleWarningWindow = TimeSpan.FromDays(config.GetSection(ConfigKeys.App.LifecycleWarningWindowDays).Get<int?>() ?? 180);
@@ -171,7 +179,9 @@ namespace Microsoft.RetireaBot.Functions
         {
             _logger.LogInformation("Running function at {CurrentTime}", DateTime.UtcNow);
 
-            string[] subs = await _managementClient.GetSubscriptionsAsync();
+            string[] subs = _scan == null
+                ? await _managementClient.GetSubscriptionsAsync()
+                : _scan.Scopes.Select(scope => scope.SubscriptionId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             if (subs is null || subs.Length == 0)
             {
                 _logger.LogWarning("No subscriptions returned; aborting.");
@@ -187,13 +197,17 @@ namespace Microsoft.RetireaBot.Functions
 
             foreach (string sub in subs)
             {
-                QueryResult<RetirementData> data = await _managementClient.RunQueryAsync<RetirementData>(sub, advisoryQuery);
+                string scopedQuery = ScanQueryScope.Apply(advisoryQuery, "resourceId", sub, _scan);
+                QueryResult<RetirementData> data = await _managementClient.RunQueryAsync<RetirementData>(sub, scopedQuery);
 
                 _logger.LogInformation("Subscription {SubscriptionId}: found {Count} retirement advisories", sub, data.Length);
 
                 for (int i = 0; i < data.Length; i++)
                 {
-                    advisories.Add(data.Data[i].ToAdvisory());
+                    if (ScanQueryScope.Contains(_scan, data.Data[i].ResourceId, sub))
+                    {
+                        advisories.Add(data.Data[i].ToAdvisory());
+                    }
                 }
             }
 
@@ -263,10 +277,11 @@ namespace Microsoft.RetireaBot.Functions
             {
                 if (aksByVersion.Count > 0)
                 {
-                    QueryResult<VersionedResource> aksResources = await _managementClient.RunQueryAsync<VersionedResource>(sub, _aksResourceQuery);
+                    QueryResult<VersionedResource> aksResources = await _managementClient.RunQueryAsync<VersionedResource>(sub, ScanQueryScope.Apply(_aksResourceQuery, "id", sub, _scan));
                     _logger.LogInformation("Subscription {SubscriptionId}: inspecting {Count} AKS clusters for lifecycle signals", sub, aksResources.Length);
                     foreach (var resource in aksResources.Data)
                     {
+                        if (!ScanQueryScope.Contains(_scan, resource.Id, sub)) continue;
                         Advisory? advisory = LifecycleAdvisoryGenerator.TryCreate(resource, aksByVersion, LifecycleProduct.AksKubernetes, now, _lifecycleWarningWindow);
                         if (advisory != null) result.Add(advisory);
                     }
@@ -274,10 +289,11 @@ namespace Microsoft.RetireaBot.Functions
 
                 if (pgByVersion.Count > 0)
                 {
-                    QueryResult<VersionedResource> pgResources = await _managementClient.RunQueryAsync<VersionedResource>(sub, _postgreSqlResourceQuery);
+                    QueryResult<VersionedResource> pgResources = await _managementClient.RunQueryAsync<VersionedResource>(sub, ScanQueryScope.Apply(_postgreSqlResourceQuery, "id", sub, _scan));
                     _logger.LogInformation("Subscription {SubscriptionId}: inspecting {Count} PostgreSQL flexible servers for lifecycle signals", sub, pgResources.Length);
                     foreach (var resource in pgResources.Data)
                     {
+                        if (!ScanQueryScope.Contains(_scan, resource.Id, sub)) continue;
                         Advisory? advisory = LifecycleAdvisoryGenerator.TryCreate(resource, pgByVersion, LifecycleProduct.AzurePostgreSQLFlexible, now, _lifecycleWarningWindow);
                         if (advisory != null) result.Add(advisory);
                     }

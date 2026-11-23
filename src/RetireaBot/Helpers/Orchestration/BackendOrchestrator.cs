@@ -277,7 +277,10 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
                 return vendor.TargetRepository;
             }
 
-            AzureRepositoryMap? mapping = vendor.TargetContainerMapping.FirstOrDefault(m => m.Type switch
+            AzureRepositoryMap? mapping = vendor.TargetContainerMapping.FirstOrDefault(m => m.ScopeId != null
+                ? advisory.Properties.ResourceMetadata.ResourceId.Equals(m.ScopeId, StringComparison.OrdinalIgnoreCase)
+                    || advisory.Properties.ResourceMetadata.ResourceId.StartsWith(m.ScopeId + "/", StringComparison.OrdinalIgnoreCase)
+                : m.Type switch
             {
                 AzureContainerType.Subscription => string.Equals(m.Name, advisory.GetSubscriptionId(), StringComparison.OrdinalIgnoreCase),
                 AzureContainerType.ResourceGroup => string.Equals(m.Name, advisory.GetResourceGroupName(), StringComparison.OrdinalIgnoreCase),
@@ -301,7 +304,7 @@ namespace Microsoft.RetireaBot.Helpers.Orchestration
             var mgIds = _workItemClients
                 .SelectMany(c => _vendorSettings.For(c.Backend).TargetContainerMapping)
                 .Where(m => m.Type == AzureContainerType.ManagementGroup)
-                .Select(m => m.Name)
+                .Select(m => m.Name!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 

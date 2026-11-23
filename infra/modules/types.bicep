@@ -1,7 +1,7 @@
 @export()
 @description('Configuration on how advisories are handled')
 type AdvisoryOptions = {
-  @description('The resource group RetireaBot should create issues for, leave blank any resource group')
+  @description('Resource-group work-item filter. Does not change scan scopes or Reader assignments.')
   targetResourceGroup: string
   @description('Whether resolved or completed Azure Advisor advisories should be included when creating work items.')
   includeResolvedAdvisories: bool
@@ -33,13 +33,31 @@ type HttpEndpointOptionsInput = {
   allowWhatIf: bool?
 }
 
+@export()
+@description('Resolved scan configuration shared by Reader provisioning and runtime query configuration.')
+type ScanOptions = {
+  mode: 'Explicit' | 'FromRouting' | 'DeploymentSubscription'
+  scopes: string[]
+  assignReader: bool
+}
+
+@export()
+@description('Optional scan overrides. Defaults to DeploymentSubscription mode with Reader provisioning enabled.')
+type ScanOptionsInput = {
+  mode: ('Explicit' | 'FromRouting' | 'DeploymentSubscription')?
+  scopes: string[]?
+  assignReader: bool?
+}
+
 type ContainerMap = {
-  @description('Name or identifier of the container on Azure')
-  name: string
+  @description('Azure container name or identifier. May be omitted when scopeId is supplied.')
+  name: string?
   @description('The container type on Azure')
-  type: 'ResourceGroup' | 'ManagementGroup' | 'Subscription'
+  type: ('ResourceGroup' | 'ManagementGroup' | 'Subscription')?
   @description('The target repository for the resources in that container')
   target: string
+  @description('Fully qualified subscription or resource-group ID. Required for FromRouting scan mode; name and type can be omitted when scopeId is supplied.')
+  scopeId: string?
 }
 
 type VendorRoutingOptionsInput = {
