@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.47.16.16243",
-      "templateHash": "16916485457421630341"
+      "version": "0.41.2.15936",
+      "templateHash": "3659760731618402293"
     },
     "name": "Azure RetireaBot - Portal Deployment",
     "description": "Portal-friendly deployment entry point with flattened configuration parameters."
@@ -62,7 +63,36 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Only create work items for resources in this resource group. Leave blank for all resource groups."
+        "description": "Resource-group work-item filter. Does not change scan scopes or Reader assignments."
+      }
+    },
+    "scanMode": {
+      "type": "string",
+      "defaultValue": "DeploymentSubscription",
+      "allowedValues": [
+        "Explicit",
+        "FromRouting",
+        "DeploymentSubscription"
+      ],
+      "metadata": {
+        "description": "Scan mode. Defaults to scanning only the deployment subscription."
+      }
+    },
+    "scanScopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "defaultValue": [],
+      "metadata": {
+        "description": "Fully qualified subscription/RG IDs for Explicit scan mode."
+      }
+    },
+    "scanAssignReader": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Whether to provision scan Reader assignments. Does not affect scan filtering or own-component permissions."
       }
     },
     "lifecycleSignalsEnabled": {
@@ -469,8 +499,8 @@
     "selectedWorkItemBackends": "[if(equals(parameters('workItemBackend'), 'GitHubAndAzureDevOps'), createArray('GitHub', 'AzureDevOps'), if(equals(parameters('workItemBackend'), 'GitHub'), createArray('GitHub'), if(equals(parameters('workItemBackend'), 'AzureDevOps'), createArray('AzureDevOps'), createArray())))]",
     "selectedDataSinkBackends": "[if(equals(parameters('dataSinkBackend'), 'PowerBI'), createArray('PowerBI'), createArray())]"
   },
-  "resources": [
-    {
+  "resources": {
+    "retireaBot": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "[format('retireaBot-{0}', parameters('deploymentName'))]",
@@ -502,6 +532,13 @@
             "value": {
               "includeResolvedAdvisories": "[parameters('advisoryIncludeResolvedAdvisories')]",
               "targetResourceGroup": "[parameters('advisoryTargetResourceGroup')]"
+            }
+          },
+          "scanOptions": {
+            "value": {
+              "mode": "[parameters('scanMode')]",
+              "scopes": "[parameters('scanScopes')]",
+              "assignReader": "[parameters('scanAssignReader')]"
             }
           },
           "lifecycleSignalsOptions": {
@@ -595,20 +632,21 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.47.16.16243",
-              "templateHash": "12224814359920820347"
+              "version": "0.41.2.15936",
+              "templateHash": "16003493379114600484"
             },
             "name": "Azure RetireaBot",
             "description": "This module contains all the components needed to deploy Azure RetireaBot onto your subscription.\n\n>**Note:** This module is currently considered a Proof-Of-Concept. Please review the module and its functionality to see if it matches your and or your customer's use case.\n"
           },
           "definitions": {
-            "_1.ContainerMap": {
+            "_2.ContainerMap": {
               "type": "object",
               "properties": {
                 "name": {
                   "type": "string",
+                  "nullable": true,
                   "metadata": {
-                    "description": "Name or identifier of the container on Azure"
+                    "description": "Azure container name or identifier. May be omitted when scopeId is supplied."
                   }
                 },
                 "type": {
@@ -618,6 +656,7 @@
                     "ResourceGroup",
                     "Subscription"
                   ],
+                  "nullable": true,
                   "metadata": {
                     "description": "The container type on Azure"
                   }
@@ -627,6 +666,13 @@
                   "metadata": {
                     "description": "The target repository for the resources in that container"
                   }
+                },
+                "scopeId": {
+                  "type": "string",
+                  "nullable": true,
+                  "metadata": {
+                    "description": "Fully qualified subscription or resource-group ID. Required for FromRouting scan mode; name and type can be omitted when scopeId is supplied."
+                  }
                 }
               },
               "metadata": {
@@ -635,7 +681,35 @@
                 }
               }
             },
-            "_1.VendorRoutingOptionsInput": {
+            "_2.ScanOptions": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "allowedValues": [
+                    "DeploymentSubscription",
+                    "Explicit",
+                    "FromRouting"
+                  ]
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "assignReader": {
+                  "type": "bool"
+                }
+              },
+              "metadata": {
+                "description": "Resolved scan configuration shared by Reader provisioning and runtime query configuration.",
+                "__bicep_imported_from!": {
+                  "sourceTemplate": "modules/types.bicep"
+                }
+              }
+            },
+            "_2.VendorRoutingOptionsInput": {
               "type": "object",
               "properties": {
                 "scope": {
@@ -661,7 +735,7 @@
                 "containerMappings": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/definitions/_1.ContainerMap"
+                    "$ref": "#/definitions/_2.ContainerMap"
                   },
                   "nullable": true
                 }
@@ -672,7 +746,7 @@
                 }
               }
             },
-            "_1.WorkItemOptionsInput": {
+            "_2.WorkItemOptionsInput": {
               "type": "object",
               "properties": {
                 "advisoryLabel": {
@@ -777,11 +851,11 @@
                   "nullable": true
                 },
                 "routing": {
-                  "$ref": "#/definitions/_1.VendorRoutingOptionsInput",
+                  "$ref": "#/definitions/_2.VendorRoutingOptionsInput",
                   "nullable": true
                 },
                 "workItemConfiguration": {
-                  "$ref": "#/definitions/_1.WorkItemOptionsInput",
+                  "$ref": "#/definitions/_2.WorkItemOptionsInput",
                   "nullable": true
                 }
               },
@@ -820,11 +894,11 @@
                   "nullable": true
                 },
                 "routing": {
-                  "$ref": "#/definitions/_1.VendorRoutingOptionsInput",
+                  "$ref": "#/definitions/_2.VendorRoutingOptionsInput",
                   "nullable": true
                 },
                 "workItemConfiguration": {
-                  "$ref": "#/definitions/_1.WorkItemOptionsInput",
+                  "$ref": "#/definitions/_2.WorkItemOptionsInput",
                   "nullable": true
                 }
               },
@@ -927,8 +1001,230 @@
                   "sourceTemplate": "modules/types.bicep"
                 }
               }
+            },
+            "ScanOptionsInput": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "allowedValues": [
+                    "DeploymentSubscription",
+                    "Explicit",
+                    "FromRouting"
+                  ],
+                  "nullable": true
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "nullable": true
+                },
+                "assignReader": {
+                  "type": "bool",
+                  "nullable": true
+                }
+              },
+              "metadata": {
+                "description": "Optional scan overrides. Defaults to DeploymentSubscription mode with Reader provisioning enabled.",
+                "__bicep_imported_from!": {
+                  "sourceTemplate": "modules/types.bicep"
+                }
+              }
             }
           },
+          "functions": [
+            {
+              "namespace": "__bicep",
+              "members": {
+                "normalizeMapping": {
+                  "parameters": [
+                    {
+                      "type": "object",
+                      "name": "mapping"
+                    }
+                  ],
+                  "output": {
+                    "type": "object",
+                    "value": "[if(not(equals(tryGet(parameters('mapping'), 'scopeId'), null())), _1.normalizeScopedMapping(parameters('mapping'), _1.parseScanScope(parameters('mapping').scopeId)), if(and(not(equals(tryGet(parameters('mapping'), 'name'), null())), not(equals(tryGet(parameters('mapping'), 'type'), null()))), parameters('mapping'), fail('Routing mappings require scopeId, or both name and type.')))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "resolveScanOptions": {
+                  "parameters": [
+                    {
+                      "$ref": "#/definitions/_2.ScanOptions",
+                      "name": "options"
+                    },
+                    {
+                      "type": "string",
+                      "name": "deploymentSubscriptionId"
+                    },
+                    {
+                      "type": "array",
+                      "name": "mappings"
+                    }
+                  ],
+                  "output": {
+                    "$ref": "#/definitions/_2.ScanOptions",
+                    "value": "[union(parameters('options'), createObject('scopes', _1.resolveScanScopes(parameters('options'), parameters('deploymentSubscriptionId'), parameters('mappings'))))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "namespace": "_1",
+              "members": {
+                "normalizeScanScope": {
+                  "parameters": [
+                    {
+                      "type": "string",
+                      "name": "id"
+                    }
+                  ],
+                  "output": {
+                    "type": "string",
+                    "value": "[if(equals(length(split(parameters('id'), '/')), 5), format('/subscriptions/{0}/resourceGroups/{1}', _1.parseScanScope(parameters('id')).subscriptionId, _1.parseScanScope(parameters('id')).resourceGroupName), format('/subscriptions/{0}', _1.parseScanScope(parameters('id')).subscriptionId))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "normalizeScopedMapping": {
+                  "parameters": [
+                    {
+                      "type": "object",
+                      "name": "mapping"
+                    },
+                    {
+                      "type": "object",
+                      "name": "scope"
+                    }
+                  ],
+                  "output": {
+                    "type": "object",
+                    "value": "[if(and(or(equals(tryGet(parameters('mapping'), 'type'), null()), equals(parameters('mapping').type, if(empty(parameters('scope').resourceGroupName), 'Subscription', 'ResourceGroup'))), or(equals(tryGet(parameters('mapping'), 'name'), null()), equals(toLower(parameters('mapping').name), if(empty(parameters('scope').resourceGroupName), parameters('scope').subscriptionId, parameters('scope').resourceGroupName)))), union(parameters('mapping'), createObject('scopeId', _1.normalizeScanScope(parameters('mapping').scopeId), 'name', if(empty(parameters('scope').resourceGroupName), parameters('scope').subscriptionId, parameters('scope').resourceGroupName), 'type', if(empty(parameters('scope').resourceGroupName), 'Subscription', 'ResourceGroup'))), fail('Routing name/type must match scopeId when supplied.'))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "parseParts": {
+                  "parameters": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "name": "parts"
+                    }
+                  ],
+                  "output": {
+                    "type": "object",
+                    "value": "[if(or(equals(length(parameters('parts')), 3), equals(length(parameters('parts')), 5)), if(and(equals(parameters('parts')[0], ''), equals(toLower(parameters('parts')[1]), 'subscriptions')), createObject('subscriptionId', _1.validateSubscriptionId(parameters('parts')[2]), 'resourceGroupName', if(equals(length(parameters('parts')), 5), if(equals(toLower(parameters('parts')[3]), 'resourcegroups'), _1.validateGroupName(parameters('parts')[4]), fail('Invalid scan resource-group scope.')), '')), fail('Scan scopes must be fully qualified subscription or resource-group IDs.')), fail('Scan scopes must be fully qualified subscription or resource-group IDs.'))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "parseScanScope": {
+                  "parameters": [
+                    {
+                      "type": "string",
+                      "name": "id"
+                    }
+                  ],
+                  "output": {
+                    "type": "object",
+                    "value": "[_1.parseParts(split(parameters('id'), '/'))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "resolveScanScopes": {
+                  "parameters": [
+                    {
+                      "$ref": "#/definitions/_2.ScanOptions",
+                      "name": "options"
+                    },
+                    {
+                      "type": "string",
+                      "name": "deploymentSubscriptionId"
+                    },
+                    {
+                      "type": "array",
+                      "name": "mappings"
+                    }
+                  ],
+                  "output": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "value": "[if(and(not(equals(parameters('options').mode, 'Explicit')), not(empty(parameters('options').scopes))), fail('Scan scopes may only be supplied in Explicit mode.'), if(equals(parameters('options').mode, 'DeploymentSubscription'), createArray(format('/subscriptions/{0}', _1.validateSubscriptionId(parameters('deploymentSubscriptionId')))), if(empty(if(equals(parameters('options').mode, 'Explicit'), parameters('options').scopes, parameters('mappings'))), fail('Restricted scan modes require at least one scope.'), union(map(if(equals(parameters('options').mode, 'Explicit'), parameters('options').scopes, map(parameters('mappings'), lambda('mapping', coalesce(tryGet(lambdaVariables('mapping'), 'scopeId'), fail('FromRouting requires scopeId on every enabled perContainer mapping.'))))), lambda('id', _1.normalizeScanScope(lambdaVariables('id')))), createArray()))))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "validateGroupName": {
+                  "parameters": [
+                    {
+                      "type": "string",
+                      "name": "name"
+                    }
+                  ],
+                  "output": {
+                    "type": "string",
+                    "value": "[if(and(and(greaterOrEquals(length(parameters('name')), 1), lessOrEquals(length(parameters('name')), 90)), not(endsWith(parameters('name'), '.'))), if(empty(filter(range(0, length(parameters('name'))), lambda('index', not(contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-().', substring(parameters('name'), lambdaVariables('index'), 1)))))), toLower(parameters('name')), fail('Scan resource-group names must contain only ASCII letters, digits, underscores, hyphens, periods, or parentheses.')), fail('Invalid scan resource-group name.'))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                },
+                "validateSubscriptionId": {
+                  "parameters": [
+                    {
+                      "type": "string",
+                      "name": "id"
+                    }
+                  ],
+                  "output": {
+                    "type": "string",
+                    "value": "[if(and(equals(length(parameters('id')), 36), equals(join(map(split(parameters('id'), '-'), lambda('part', string(length(lambdaVariables('part'))))), ','), '8,4,4,4,12')), if(empty(filter(range(0, length(replace(parameters('id'), '-', ''))), lambda('index', not(contains('0123456789abcdef', substring(toLower(replace(parameters('id'), '-', '')), lambdaVariables('index'), 1)))))), toLower(parameters('id')), fail('Scan subscription IDs must be GUIDs.')), fail('Scan subscription IDs must be GUIDs.'))]"
+                  },
+                  "metadata": {
+                    "__bicep_imported_from!": {
+                      "sourceTemplate": "modules/scanScopes.bicep"
+                    }
+                  }
+                }
+              }
+            }
+          ],
           "parameters": {
             "deploymentName": {
               "type": "string",
@@ -996,6 +1292,13 @@
               "defaultValue": {},
               "metadata": {
                 "description": "Configuration for selecting which Azure Advisor recommendations RetireaBot processes."
+              }
+            },
+            "scanOptions": {
+              "$ref": "#/definitions/ScanOptionsInput",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Scan mode, approved scope IDs, and optional Reader provisioning. Defaults to scanning and granting Reader on the deployment subscription."
               }
             },
             "azureDevOpsOptions": {
@@ -1096,6 +1399,11 @@
               "tableName": "",
               "writeMode": "Append"
             },
+            "defaultScanOptions": {
+              "mode": "DeploymentSubscription",
+              "scopes": [],
+              "assignReader": true
+            },
             "resolvedAdvisoryOptions": "[union(variables('defaultAdvisoryOptions'), parameters('advisoryOptions'))]",
             "resolvedAzureDevOpsOptions": "[union(variables('defaultAzureDevOpsOptions'), parameters('azureDevOpsOptions'), createObject('routing', union(variables('defaultRoutingOptions'), coalesce(tryGet(parameters('azureDevOpsOptions'), 'routing'), createObject())), 'workItemConfiguration', union(variables('defaultWorkItemOptions'), coalesce(tryGet(parameters('azureDevOpsOptions'), 'workItemConfiguration'), createObject()))))]",
             "resolvedGitHubOptions": "[union(variables('defaultGitHubOptions'), parameters('gitHubOptions'), createObject('routing', union(variables('defaultRoutingOptions'), coalesce(tryGet(parameters('gitHubOptions'), 'routing'), createObject())), 'workItemConfiguration', union(variables('defaultWorkItemOptions'), coalesce(tryGet(parameters('gitHubOptions'), 'workItemConfiguration'), createObject()))))]",
@@ -1115,7 +1423,11 @@
             "gitHubParamCountValidation": "[if(and(not(or(equals(variables('gitHubParamCount'), 0), equals(variables('gitHubParamCount'), 4))), contains(parameters('workItemBackend'), 'GitHub')), fail('To use GitHub App authentication, you need to populate all required fields'), null())]",
             "adoOrganisationUrlValidation": "[if(and(empty(variables('resolvedAzureDevOpsOptions').organisationUrl), contains(parameters('workItemBackend'), 'AzureDevOps')), fail('You must provide the Azure DevOps organisation URL when using the AzureDevOps backend'), null())]",
             "validatedGitHubOptions": "[if(and(and(contains(parameters('workItemBackend'), 'GitHub'), not(variables('resolvedGitHubOptions').workItemConfiguration.createChildWorkItems)), not(variables('resolvedGitHubOptions').workItemConfiguration.createParentWorkItems)), fail('GitHub must create at least one type of issue.'), variables('resolvedGitHubOptions'))]",
-            "validatedAzureDevOpsOptions": "[if(and(and(contains(parameters('workItemBackend'), 'AzureDevOps'), not(variables('resolvedAzureDevOpsOptions').workItemConfiguration.createChildWorkItems)), not(variables('resolvedAzureDevOpsOptions').workItemConfiguration.createParentWorkItems)), fail('Azure DevOps must create at least one type of work item.'), variables('resolvedAzureDevOpsOptions'))]"
+            "validatedAzureDevOpsOptions": "[if(and(and(contains(parameters('workItemBackend'), 'AzureDevOps'), not(variables('resolvedAzureDevOpsOptions').workItemConfiguration.createChildWorkItems)), not(variables('resolvedAzureDevOpsOptions').workItemConfiguration.createParentWorkItems)), fail('Azure DevOps must create at least one type of work item.'), variables('resolvedAzureDevOpsOptions'))]",
+            "normalizedGitHubOptions": "[union(variables('validatedGitHubOptions'), createObject('routing', union(variables('validatedGitHubOptions').routing, createObject('containerMappings', if(contains(parameters('workItemBackend'), 'GitHub'), map(variables('validatedGitHubOptions').routing.containerMappings, lambda('mapping', __bicep.normalizeMapping(lambdaVariables('mapping')))), createArray())))))]",
+            "normalizedAzureDevOpsOptions": "[union(variables('validatedAzureDevOpsOptions'), createObject('routing', union(variables('validatedAzureDevOpsOptions').routing, createObject('containerMappings', if(contains(parameters('workItemBackend'), 'AzureDevOps'), map(variables('validatedAzureDevOpsOptions').routing.containerMappings, lambda('mapping', __bicep.normalizeMapping(lambdaVariables('mapping')))), createArray())))))]",
+            "scanRoutingMappings": "[concat(if(and(contains(parameters('workItemBackend'), 'GitHub'), equals(variables('normalizedGitHubOptions').routing.scope, 'perContainer')), variables('normalizedGitHubOptions').routing.containerMappings, createArray()), if(and(contains(parameters('workItemBackend'), 'AzureDevOps'), equals(variables('normalizedAzureDevOpsOptions').routing.scope, 'perContainer')), variables('normalizedAzureDevOpsOptions').routing.containerMappings, createArray()))]",
+            "resolvedScanOptions": "[__bicep.resolveScanOptions(union(variables('defaultScanOptions'), parameters('scanOptions')), subscription().subscriptionId, variables('scanRoutingMappings'))]"
           },
           "resources": {
             "keyVault": {
@@ -1157,8 +1469,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.47.16.16243",
-                      "templateHash": "17764201716407533157"
+                      "version": "0.41.2.15936",
+                      "templateHash": "9223665376857177005"
                     }
                   },
                   "definitions": {
@@ -1167,8 +1479,9 @@
                       "properties": {
                         "name": {
                           "type": "string",
+                          "nullable": true,
                           "metadata": {
-                            "description": "Name or identifier of the container on Azure"
+                            "description": "Azure container name or identifier. May be omitted when scopeId is supplied."
                           }
                         },
                         "type": {
@@ -1178,6 +1491,7 @@
                             "ResourceGroup",
                             "Subscription"
                           ],
+                          "nullable": true,
                           "metadata": {
                             "description": "The container type on Azure"
                           }
@@ -1186,6 +1500,13 @@
                           "type": "string",
                           "metadata": {
                             "description": "The target repository for the resources in that container"
+                          }
+                        },
+                        "scopeId": {
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {
+                            "description": "Fully qualified subscription or resource-group ID. Required for FromRouting scan mode; name and type can be omitted when scopeId is supplied."
                           }
                         }
                       },
@@ -1648,8 +1969,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.47.16.16243",
-                      "templateHash": "3772966290502119703"
+                      "version": "0.41.2.15936",
+                      "templateHash": "5611217571917243732"
                     }
                   },
                   "parameters": {
@@ -1823,8 +2144,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.47.16.16243",
-                      "templateHash": "11259587785362819333"
+                      "version": "0.41.2.15936",
+                      "templateHash": "1556008436948748480"
                     }
                   },
                   "parameters": {
@@ -1914,8 +2235,11 @@
                   "workItemBackend": {
                     "value": "[parameters('workItemBackend')]"
                   },
+                  "scanOptions": {
+                    "value": "[variables('resolvedScanOptions')]"
+                  },
                   "azureDevOpsOptions": {
-                    "value": "[variables('validatedAzureDevOpsOptions')]"
+                    "value": "[variables('normalizedAzureDevOpsOptions')]"
                   },
                   "powerBIOptions": {
                     "value": "[variables('resolvedPowerBIOptions')]"
@@ -1934,18 +2258,19 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.47.16.16243",
-                      "templateHash": "5629218231611904630"
+                      "version": "0.41.2.15936",
+                      "templateHash": "15854467352395559589"
                     }
                   },
                   "definitions": {
-                    "_1.ContainerMap": {
+                    "_2.ContainerMap": {
                       "type": "object",
                       "properties": {
                         "name": {
                           "type": "string",
+                          "nullable": true,
                           "metadata": {
-                            "description": "Name or identifier of the container on Azure"
+                            "description": "Azure container name or identifier. May be omitted when scopeId is supplied."
                           }
                         },
                         "type": {
@@ -1955,6 +2280,7 @@
                             "ResourceGroup",
                             "Subscription"
                           ],
+                          "nullable": true,
                           "metadata": {
                             "description": "The container type on Azure"
                           }
@@ -1964,6 +2290,13 @@
                           "metadata": {
                             "description": "The target repository for the resources in that container"
                           }
+                        },
+                        "scopeId": {
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {
+                            "description": "Fully qualified subscription or resource-group ID. Required for FromRouting scan mode; name and type can be omitted when scopeId is supplied."
+                          }
                         }
                       },
                       "metadata": {
@@ -1972,7 +2305,7 @@
                         }
                       }
                     },
-                    "_1.VendorRoutingOptions": {
+                    "_2.VendorRoutingOptions": {
                       "type": "object",
                       "properties": {
                         "scope": {
@@ -2006,7 +2339,7 @@
                         "containerMappings": {
                           "type": "array",
                           "items": {
-                            "$ref": "#/definitions/_1.ContainerMap"
+                            "$ref": "#/definitions/_2.ContainerMap"
                           },
                           "metadata": {
                             "description": "Repository mappings used when scope is perContainer."
@@ -2019,7 +2352,7 @@
                         }
                       }
                     },
-                    "_1.WorkItemOptions": {
+                    "_2.WorkItemOptions": {
                       "type": "object",
                       "properties": {
                         "advisoryLabel": {
@@ -2141,13 +2474,13 @@
                           }
                         },
                         "routing": {
-                          "$ref": "#/definitions/_1.VendorRoutingOptions",
+                          "$ref": "#/definitions/_2.VendorRoutingOptions",
                           "metadata": {
                             "description": "Defines how this backend will process Advisories to work items"
                           }
                         },
                         "workItemConfiguration": {
-                          "$ref": "#/definitions/_1.WorkItemOptions",
+                          "$ref": "#/definitions/_2.WorkItemOptions",
                           "metadata": {
                             "description": "Defines how behave on this backend"
                           }
@@ -2226,8 +2559,119 @@
                           "sourceTemplate": "types.bicep"
                         }
                       }
+                    },
+                    "ScanOptions": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "allowedValues": [
+                            "DeploymentSubscription",
+                            "Explicit",
+                            "FromRouting"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "assignReader": {
+                          "type": "bool"
+                        }
+                      },
+                      "metadata": {
+                        "description": "Resolved scan configuration shared by Reader provisioning and runtime query configuration.",
+                        "__bicep_imported_from!": {
+                          "sourceTemplate": "types.bicep"
+                        }
+                      }
                     }
                   },
+                  "functions": [
+                    {
+                      "namespace": "_1",
+                      "members": {
+                        "parseParts": {
+                          "parameters": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "name": "parts"
+                            }
+                          ],
+                          "output": {
+                            "type": "object",
+                            "value": "[if(or(equals(length(parameters('parts')), 3), equals(length(parameters('parts')), 5)), if(and(equals(parameters('parts')[0], ''), equals(toLower(parameters('parts')[1]), 'subscriptions')), createObject('subscriptionId', _1.validateSubscriptionId(parameters('parts')[2]), 'resourceGroupName', if(equals(length(parameters('parts')), 5), if(equals(toLower(parameters('parts')[3]), 'resourcegroups'), _1.validateGroupName(parameters('parts')[4]), fail('Invalid scan resource-group scope.')), '')), fail('Scan scopes must be fully qualified subscription or resource-group IDs.')), fail('Scan scopes must be fully qualified subscription or resource-group IDs.'))]"
+                          },
+                          "metadata": {
+                            "__bicep_imported_from!": {
+                              "sourceTemplate": "scanScopes.bicep"
+                            }
+                          }
+                        },
+                        "validateGroupName": {
+                          "parameters": [
+                            {
+                              "type": "string",
+                              "name": "name"
+                            }
+                          ],
+                          "output": {
+                            "type": "string",
+                            "value": "[if(and(and(greaterOrEquals(length(parameters('name')), 1), lessOrEquals(length(parameters('name')), 90)), not(endsWith(parameters('name'), '.'))), if(empty(filter(range(0, length(parameters('name'))), lambda('index', not(contains('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-().', substring(parameters('name'), lambdaVariables('index'), 1)))))), toLower(parameters('name')), fail('Scan resource-group names must contain only ASCII letters, digits, underscores, hyphens, periods, or parentheses.')), fail('Invalid scan resource-group name.'))]"
+                          },
+                          "metadata": {
+                            "__bicep_imported_from!": {
+                              "sourceTemplate": "scanScopes.bicep"
+                            }
+                          }
+                        },
+                        "validateSubscriptionId": {
+                          "parameters": [
+                            {
+                              "type": "string",
+                              "name": "id"
+                            }
+                          ],
+                          "output": {
+                            "type": "string",
+                            "value": "[if(and(equals(length(parameters('id')), 36), equals(join(map(split(parameters('id'), '-'), lambda('part', string(length(lambdaVariables('part'))))), ','), '8,4,4,4,12')), if(empty(filter(range(0, length(replace(parameters('id'), '-', ''))), lambda('index', not(contains('0123456789abcdef', substring(toLower(replace(parameters('id'), '-', '')), lambdaVariables('index'), 1)))))), toLower(parameters('id')), fail('Scan subscription IDs must be GUIDs.')), fail('Scan subscription IDs must be GUIDs.'))]"
+                          },
+                          "metadata": {
+                            "__bicep_imported_from!": {
+                              "sourceTemplate": "scanScopes.bicep"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "namespace": "__bicep",
+                      "members": {
+                        "parseScanScope": {
+                          "parameters": [
+                            {
+                              "type": "string",
+                              "name": "id"
+                            }
+                          ],
+                          "output": {
+                            "type": "object",
+                            "value": "[_1.parseParts(split(parameters('id'), '/'))]"
+                          },
+                          "metadata": {
+                            "__bicep_imported_from!": {
+                              "sourceTemplate": "scanScopes.bicep"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ],
                   "parameters": {
                     "deploymentSuffix": {
                       "type": "string"
@@ -2256,6 +2700,9 @@
                     "powerBIOptions": {
                       "$ref": "#/definitions/PowerBIOptions"
                     },
+                    "scanOptions": {
+                      "$ref": "#/definitions/ScanOptions"
+                    },
                     "dataSinkBackend": {
                       "type": "array",
                       "items": {
@@ -2267,6 +2714,9 @@
                     }
                   },
                   "variables": {
+                    "effectiveScanScopes": "[map(parameters('scanOptions').scopes, lambda('id', __bicep.parseScanScope(lambdaVariables('id'))))]",
+                    "readerSubscriptions": "[if(parameters('scanOptions').assignReader, filter(variables('effectiveScanScopes'), lambda('scope', empty(lambdaVariables('scope').resourceGroupName))), createArray())]",
+                    "readerResourceGroups": "[if(parameters('scanOptions').assignReader, filter(variables('effectiveScanScopes'), lambda('scope', not(empty(lambdaVariables('scope').resourceGroupName)))), createArray())]",
                     "storageBlobDataOwnerRoleId": "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
                     "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
                     "storageQueueDataContributorId": "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
@@ -2418,10 +2868,14 @@
                       ]
                     },
                     "subscriptionRoleAssignments": {
+                      "copy": {
+                        "name": "subscriptionRoleAssignments",
+                        "count": "[length(variables('readerSubscriptions'))]"
+                      },
                       "type": "Microsoft.Resources/deployments",
                       "apiVersion": "2025-04-01",
-                      "name": "[variables('subscriptionRoleAssignmentsName')]",
-                      "subscriptionId": "[subscription().subscriptionId]",
+                      "name": "[if(equals(variables('readerSubscriptions')[copyIndex()].subscriptionId, subscription().subscriptionId), variables('subscriptionRoleAssignmentsName'), format('sra-{0}-{1}', parameters('deploymentSuffix'), uniqueString(variables('readerSubscriptions')[copyIndex()].subscriptionId)))]",
+                      "subscriptionId": "[variables('readerSubscriptions')[copyIndex()].subscriptionId]",
                       "location": "[resourceGroup().location]",
                       "properties": {
                         "expressionEvaluationOptions": {
@@ -2439,8 +2893,8 @@
                           "metadata": {
                             "_generator": {
                               "name": "bicep",
-                              "version": "0.47.16.16243",
-                              "templateHash": "5478567201385593738"
+                              "version": "0.41.2.15936",
+                              "templateHash": "14794810813842945581"
                             }
                           },
                           "parameters": {
@@ -2471,6 +2925,65 @@
                       "dependsOn": [
                         "userAssignedIdentity"
                       ]
+                    },
+                    "resourceGroupRoleAssignments": {
+                      "copy": {
+                        "name": "resourceGroupRoleAssignments",
+                        "count": "[length(variables('readerResourceGroups'))]"
+                      },
+                      "type": "Microsoft.Resources/deployments",
+                      "apiVersion": "2025-04-01",
+                      "name": "[format('rg-reader-{0}-{1}', parameters('deploymentSuffix'), uniqueString(variables('readerResourceGroups')[copyIndex()].subscriptionId, variables('readerResourceGroups')[copyIndex()].resourceGroupName))]",
+                      "subscriptionId": "[variables('readerResourceGroups')[copyIndex()].subscriptionId]",
+                      "resourceGroup": "[variables('readerResourceGroups')[copyIndex()].resourceGroupName]",
+                      "properties": {
+                        "expressionEvaluationOptions": {
+                          "scope": "inner"
+                        },
+                        "mode": "Incremental",
+                        "parameters": {
+                          "principalId": {
+                            "value": "[reference('userAssignedIdentity').principalId]"
+                          }
+                        },
+                        "template": {
+                          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                          "contentVersion": "1.0.0.0",
+                          "metadata": {
+                            "_generator": {
+                              "name": "bicep",
+                              "version": "0.41.2.15936",
+                              "templateHash": "15464174204785276889"
+                            }
+                          },
+                          "parameters": {
+                            "principalId": {
+                              "type": "string",
+                              "metadata": {
+                                "description": "The principal ID of the identity to assign Reader to."
+                              }
+                            }
+                          },
+                          "variables": {
+                            "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+                          },
+                          "resources": [
+                            {
+                              "type": "Microsoft.Authorization/roleAssignments",
+                              "apiVersion": "2022-04-01",
+                              "name": "[guid(resourceGroup().id, parameters('principalId'), 'Reader')]",
+                              "properties": {
+                                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]",
+                                "principalId": "[parameters('principalId')]",
+                                "principalType": "ServicePrincipal"
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "dependsOn": [
+                        "userAssignedIdentity"
+                      ]
                     }
                   },
                   "outputs": {
@@ -2485,6 +2998,16 @@
                     "clientId": {
                       "type": "string",
                       "value": "[reference('userAssignedIdentity').clientId]"
+                    },
+                    "readerResourceGroupIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "copy": {
+                        "count": "[length(variables('readerResourceGroups'))]",
+                        "input": "[format('/subscriptions/{0}/resourceGroups/{1}', variables('readerResourceGroups')[copyIndex()].subscriptionId, variables('readerResourceGroups')[copyIndex()].resourceGroupName)]"
+                      }
                     }
                   }
                 }
@@ -2544,11 +3067,14 @@
                   "advisoryOptions": {
                     "value": "[variables('resolvedAdvisoryOptions')]"
                   },
+                  "scanOptions": {
+                    "value": "[variables('resolvedScanOptions')]"
+                  },
                   "azureDevOpsOptions": {
-                    "value": "[variables('validatedAzureDevOpsOptions')]"
+                    "value": "[variables('normalizedAzureDevOpsOptions')]"
                   },
                   "gitHubOptions": {
-                    "value": "[variables('validatedGitHubOptions')]"
+                    "value": "[variables('normalizedGitHubOptions')]"
                   },
                   "lifecycleSignalsOptions": {
                     "value": "[variables('resolvedLifecycleSignalsOptions')]"
@@ -2570,8 +3096,8 @@
                   "metadata": {
                     "_generator": {
                       "name": "bicep",
-                      "version": "0.47.16.16243",
-                      "templateHash": "11397350210432651780"
+                      "version": "0.41.2.15936",
+                      "templateHash": "15926896608710300511"
                     }
                   },
                   "definitions": {
@@ -2580,8 +3106,9 @@
                       "properties": {
                         "name": {
                           "type": "string",
+                          "nullable": true,
                           "metadata": {
-                            "description": "Name or identifier of the container on Azure"
+                            "description": "Azure container name or identifier. May be omitted when scopeId is supplied."
                           }
                         },
                         "type": {
@@ -2591,6 +3118,7 @@
                             "ResourceGroup",
                             "Subscription"
                           ],
+                          "nullable": true,
                           "metadata": {
                             "description": "The container type on Azure"
                           }
@@ -2599,6 +3127,13 @@
                           "type": "string",
                           "metadata": {
                             "description": "The target repository for the resources in that container"
+                          }
+                        },
+                        "scopeId": {
+                          "type": "string",
+                          "nullable": true,
+                          "metadata": {
+                            "description": "Fully qualified subscription or resource-group ID. Required for FromRouting scan mode; name and type can be omitted when scopeId is supplied."
                           }
                         }
                       },
@@ -2713,7 +3248,7 @@
                         "targetResourceGroup": {
                           "type": "string",
                           "metadata": {
-                            "description": "The resource group RetireaBot should create issues for, leave blank any resource group"
+                            "description": "Resource-group work-item filter. Does not change scan scopes or Reader assignments."
                           }
                         },
                         "includeResolvedAdvisories": {
@@ -2994,6 +3529,34 @@
                           "sourceTemplate": "types.bicep"
                         }
                       }
+                    },
+                    "ScanOptions": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "allowedValues": [
+                            "DeploymentSubscription",
+                            "Explicit",
+                            "FromRouting"
+                          ]
+                        },
+                        "scopes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "assignReader": {
+                          "type": "bool"
+                        }
+                      },
+                      "metadata": {
+                        "description": "Resolved scan configuration shared by Reader provisioning and runtime query configuration.",
+                        "__bicep_imported_from!": {
+                          "sourceTemplate": "types.bicep"
+                        }
+                      }
                     }
                   },
                   "parameters": {
@@ -3057,6 +3620,9 @@
                     "powerBIOptions": {
                       "$ref": "#/definitions/PowerBIOptions"
                     },
+                    "scanOptions": {
+                      "$ref": "#/definitions/ScanOptions"
+                    },
                     "gitHubParamCount": {
                       "type": "int"
                     }
@@ -3103,7 +3669,7 @@
                         "siteConfig": {
                           "netFrameworkVersion": "v10.0",
                           "use32BitWorkerProcess": false,
-                          "appSettings": "[union(createArray(createObject('name', 'APPINSIGHTS_INSTRUMENTATIONKEY', 'value', parameters('applicationInsightsInstrumentationKey')), createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', parameters('applicationInsightsConnectionString')), createObject('name', 'APPLICATIONINSIGHTS_AUTHENTICATION_STRING', 'value', format('Authorization=AAD;ClientId={0}', parameters('managedIdentityClientId'))), createObject('name', 'App__DataSinkBackend', 'value', join(parameters('dataSinkBackend'), ',')), createObject('name', 'App__HTTPEndpointEnable', 'value', parameters('httpEndpoint').enabled), createObject('name', 'App__HTTPEndpointOutput', 'value', parameters('httpEndpoint').includeOutput), createObject('name', 'App__HTTPEndpointWhatIf', 'value', parameters('httpEndpoint').allowWhatIf), createObject('name', 'App__LifecycleSignalsEnable', 'value', parameters('lifecycleSignalsOptions').enabled), createObject('name', 'App__IncludeResolvedAdvisories', 'value', parameters('advisoryOptions').includeResolvedAdvisories), createObject('name', 'App__LifecycleWarningWindowDays', 'value', parameters('lifecycleSignalsOptions').warningWindowDays), createObject('name', 'App__TimerTrigger', 'value', parameters('timerTrigger')), createObject('name', 'App__WorkItemBackend', 'value', join(parameters('workItemBackend'), ',')), createObject('name', 'AZURE_CLIENT_ID', 'value', parameters('managedIdentityClientId')), createObject('name', 'AzureWebJobsStorage__accountName', 'value', parameters('storageAccountName')), createObject('name', 'AzureWebJobsStorage__clientId', 'value', parameters('managedIdentityClientId')), createObject('name', 'AzureWebJobsStorage__credential', 'value', 'managedidentity'), createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'KeyVault__Uri', 'value', parameters('keyVaultUri')), createObject('name', 'WEBSITE_ENABLE_SYNC_UPDATE_SITE', 'value', 'true'), createObject('name', 'WEBSITE_RUN_FROM_PACKAGE', 'value', '1'), createObject('name', 'WEBSITE_USE_PLACEHOLDER_DOTNETISOLATED', 'value', '1')), if(or(not(equals(parameters('gitHubParamCount'), 4)), not(contains(parameters('workItemBackend'), 'GitHub'))), createArray(), createArray(createObject('name', 'GitHub__AppId', 'value', parameters('gitHubOptions').appId), createObject('name', 'GitHub__AppInstallId', 'value', parameters('gitHubOptions').installId), createObject('name', 'GitHub__AppPrivateKeyId', 'value', parameters('gitHubOptions').privateKeyId))), if(not(contains(parameters('workItemBackend'), 'GitHub')), createArray(), union(createArray(createObject('name', 'GitHub__AdvisoryLabel', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryLabel), createObject('name', 'GitHub__AdvisoryParentLabel', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryParentLabel), createObject('name', 'GitHub__AdvisoryLabelPrefix', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryLabelPrefix), createObject('name', 'GitHub__AdvisoryParentLabelPrefix', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryParentLabelPrefix), createObject('name', 'GitHub__CreateParentWorkItems', 'value', parameters('gitHubOptions').workItemConfiguration.createParentWorkItems), createObject('name', 'GitHub__CreateChildWorkItems', 'value', parameters('gitHubOptions').workItemConfiguration.createChildWorkItems), createObject('name', 'GitHub__IncludeResourceId', 'value', parameters('gitHubOptions').workItemConfiguration.includeResourceId), createObject('name', 'GitHub__TargetRepository', 'value', parameters('gitHubOptions').routing.targetRepository), createObject('name', 'GitHub__UnmappedRepository', 'value', parameters('gitHubOptions').routing.unmappedRepository), createObject('name', 'GitHub__UseTriageRepoForUnmapped', 'value', parameters('gitHubOptions').routing.useTriageForUnmapped), createObject('name', 'GitHub__AssignCopilot', 'value', parameters('gitHubOptions').assignCopilot), createObject('name', 'GitHub__WorkItemScope', 'value', parameters('gitHubOptions').routing.scope)), if(empty(parameters('advisoryOptions').targetResourceGroup), createArray(), createArray(createObject('name', 'GitHub__TargetResourceGroup', 'value', parameters('advisoryOptions').targetResourceGroup))), if(equals(parameters('gitHubOptions').routing.scope, 'monolithic'), createArray(), createArray(createObject('name', 'GitHub__TargetContainerMapping', 'value', string(parameters('gitHubOptions').routing.containerMappings)))))), if(not(contains(parameters('workItemBackend'), 'AzureDevOps')), createArray(), union(createArray(createObject('name', 'AzureDevOps__OrganisationUrl', 'value', parameters('azureDevOpsOptions').organisationUrl), createObject('name', 'AzureDevOps__AdvisoryLabel', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryLabel), createObject('name', 'AzureDevOps__AdvisoryParentLabel', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryParentLabel), createObject('name', 'AzureDevOps__AdvisoryLabelPrefix', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryLabelPrefix), createObject('name', 'AzureDevOps__AdvisoryParentLabelPrefix', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryParentLabelPrefix), createObject('name', 'AzureDevOps__CreateParentWorkItems', 'value', parameters('azureDevOpsOptions').workItemConfiguration.createParentWorkItems), createObject('name', 'AzureDevOps__CreateChildWorkItems', 'value', parameters('azureDevOpsOptions').workItemConfiguration.createChildWorkItems), createObject('name', 'AzureDevOps__IncludeResourceId', 'value', parameters('azureDevOpsOptions').workItemConfiguration.includeResourceId), createObject('name', 'AzureDevOps__TargetRepository', 'value', parameters('azureDevOpsOptions').routing.targetRepository), createObject('name', 'AzureDevOps__UnmappedRepository', 'value', parameters('azureDevOpsOptions').routing.unmappedRepository), createObject('name', 'AzureDevOps__UseTriageRepoForUnmapped', 'value', parameters('azureDevOpsOptions').routing.useTriageForUnmapped), createObject('name', 'AzureDevOps__WorkItemScope', 'value', parameters('azureDevOpsOptions').routing.scope)), if(empty(parameters('advisoryOptions').targetResourceGroup), createArray(), createArray(createObject('name', 'AzureDevOps__TargetResourceGroup', 'value', parameters('advisoryOptions').targetResourceGroup))), if(equals(parameters('azureDevOpsOptions').routing.scope, 'monolithic'), createArray(), createArray(createObject('name', 'AzureDevOps__TargetContainerMapping', 'value', string(parameters('azureDevOpsOptions').routing.containerMappings)))), if(empty(parameters('azureDevOpsOptions').clientId), createArray(), createArray(createObject('name', 'AzureDevOps__ClientId', 'value', parameters('azureDevOpsOptions').clientId))), if(empty(parameters('azureDevOpsOptions').tenantId), createArray(), createArray(createObject('name', 'AzureDevOps__TenantId', 'value', parameters('azureDevOpsOptions').tenantId))), if(empty(parameters('azureDevOpsOptions').certificateId), createArray(), createArray(createObject('name', 'AzureDevOps__CertificateId', 'value', parameters('azureDevOpsOptions').certificateId))), if(empty(parameters('azureDevOpsOptions').workItemDefaultAssignee), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemDefaultAssignee', 'value', parameters('azureDevOpsOptions').workItemDefaultAssignee))), if(empty(parameters('azureDevOpsOptions').workItemOpenState), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemOpenState', 'value', parameters('azureDevOpsOptions').workItemOpenState))), if(empty(parameters('azureDevOpsOptions').workItemClosedState), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemClosedState', 'value', parameters('azureDevOpsOptions').workItemClosedState))), if(empty(parameters('azureDevOpsOptions').workItemType), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemType', 'value', parameters('azureDevOpsOptions').workItemType))))), if(not(contains(parameters('dataSinkBackend'), 'PowerBI')), createArray(), union(createArray(createObject('name', 'PowerBI__WorkspaceId', 'value', parameters('powerBIOptions').workspaceId), createObject('name', 'PowerBI__DatasetId', 'value', parameters('powerBIOptions').datasetId), createObject('name', 'PowerBI__TableName', 'value', parameters('powerBIOptions').tableName), createObject('name', 'PowerBI__WriteMode', 'value', parameters('powerBIOptions').writeMode)), if(empty(parameters('powerBIOptions').clientId), createArray(), createArray(createObject('name', 'PowerBI__ClientId', 'value', parameters('powerBIOptions').clientId))), if(empty(parameters('powerBIOptions').tenantId), createArray(), createArray(createObject('name', 'PowerBI__TenantId', 'value', parameters('powerBIOptions').tenantId))), if(empty(parameters('powerBIOptions').certificateId), createArray(), createArray(createObject('name', 'PowerBI__CertificateId', 'value', parameters('powerBIOptions').certificateId))))))]"
+                          "appSettings": "[union(createArray(createObject('name', 'Scan__Mode', 'value', parameters('scanOptions').mode), createObject('name', 'Scan__Scopes', 'value', string(if(equals(parameters('scanOptions').mode, 'Explicit'), parameters('scanOptions').scopes, createArray()))), createObject('name', 'Scan__ResolvedScopes', 'value', string(parameters('scanOptions').scopes)), createObject('name', 'Scan__DeploymentSubscriptionId', 'value', subscription().subscriptionId), createObject('name', 'Scan__AssignReader', 'value', string(parameters('scanOptions').assignReader)), createObject('name', 'APPINSIGHTS_INSTRUMENTATIONKEY', 'value', parameters('applicationInsightsInstrumentationKey')), createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', parameters('applicationInsightsConnectionString')), createObject('name', 'APPLICATIONINSIGHTS_AUTHENTICATION_STRING', 'value', format('Authorization=AAD;ClientId={0}', parameters('managedIdentityClientId'))), createObject('name', 'App__DataSinkBackend', 'value', join(parameters('dataSinkBackend'), ',')), createObject('name', 'App__HTTPEndpointEnable', 'value', parameters('httpEndpoint').enabled), createObject('name', 'App__HTTPEndpointOutput', 'value', parameters('httpEndpoint').includeOutput), createObject('name', 'App__HTTPEndpointWhatIf', 'value', parameters('httpEndpoint').allowWhatIf), createObject('name', 'App__LifecycleSignalsEnable', 'value', parameters('lifecycleSignalsOptions').enabled), createObject('name', 'App__IncludeResolvedAdvisories', 'value', parameters('advisoryOptions').includeResolvedAdvisories), createObject('name', 'App__LifecycleWarningWindowDays', 'value', parameters('lifecycleSignalsOptions').warningWindowDays), createObject('name', 'App__TimerTrigger', 'value', parameters('timerTrigger')), createObject('name', 'App__WorkItemBackend', 'value', join(parameters('workItemBackend'), ',')), createObject('name', 'AZURE_CLIENT_ID', 'value', parameters('managedIdentityClientId')), createObject('name', 'AzureWebJobsStorage__accountName', 'value', parameters('storageAccountName')), createObject('name', 'AzureWebJobsStorage__clientId', 'value', parameters('managedIdentityClientId')), createObject('name', 'AzureWebJobsStorage__credential', 'value', 'managedidentity'), createObject('name', 'FUNCTIONS_EXTENSION_VERSION', 'value', '~4'), createObject('name', 'FUNCTIONS_WORKER_RUNTIME', 'value', 'dotnet-isolated'), createObject('name', 'KeyVault__Uri', 'value', parameters('keyVaultUri')), createObject('name', 'WEBSITE_ENABLE_SYNC_UPDATE_SITE', 'value', 'true'), createObject('name', 'WEBSITE_RUN_FROM_PACKAGE', 'value', '1'), createObject('name', 'WEBSITE_USE_PLACEHOLDER_DOTNETISOLATED', 'value', '1')), if(or(not(equals(parameters('gitHubParamCount'), 4)), not(contains(parameters('workItemBackend'), 'GitHub'))), createArray(), createArray(createObject('name', 'GitHub__AppId', 'value', parameters('gitHubOptions').appId), createObject('name', 'GitHub__AppInstallId', 'value', parameters('gitHubOptions').installId), createObject('name', 'GitHub__AppPrivateKeyId', 'value', parameters('gitHubOptions').privateKeyId))), if(not(contains(parameters('workItemBackend'), 'GitHub')), createArray(), union(createArray(createObject('name', 'GitHub__AdvisoryLabel', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryLabel), createObject('name', 'GitHub__AdvisoryParentLabel', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryParentLabel), createObject('name', 'GitHub__AdvisoryLabelPrefix', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryLabelPrefix), createObject('name', 'GitHub__AdvisoryParentLabelPrefix', 'value', parameters('gitHubOptions').workItemConfiguration.advisoryParentLabelPrefix), createObject('name', 'GitHub__CreateParentWorkItems', 'value', parameters('gitHubOptions').workItemConfiguration.createParentWorkItems), createObject('name', 'GitHub__CreateChildWorkItems', 'value', parameters('gitHubOptions').workItemConfiguration.createChildWorkItems), createObject('name', 'GitHub__IncludeResourceId', 'value', parameters('gitHubOptions').workItemConfiguration.includeResourceId), createObject('name', 'GitHub__TargetRepository', 'value', parameters('gitHubOptions').routing.targetRepository), createObject('name', 'GitHub__UnmappedRepository', 'value', parameters('gitHubOptions').routing.unmappedRepository), createObject('name', 'GitHub__UseTriageRepoForUnmapped', 'value', parameters('gitHubOptions').routing.useTriageForUnmapped), createObject('name', 'GitHub__AssignCopilot', 'value', parameters('gitHubOptions').assignCopilot), createObject('name', 'GitHub__WorkItemScope', 'value', parameters('gitHubOptions').routing.scope)), if(empty(parameters('advisoryOptions').targetResourceGroup), createArray(), createArray(createObject('name', 'GitHub__TargetResourceGroup', 'value', parameters('advisoryOptions').targetResourceGroup))), if(equals(parameters('gitHubOptions').routing.scope, 'monolithic'), createArray(), createArray(createObject('name', 'GitHub__TargetContainerMapping', 'value', string(parameters('gitHubOptions').routing.containerMappings)))))), if(not(contains(parameters('workItemBackend'), 'AzureDevOps')), createArray(), union(createArray(createObject('name', 'AzureDevOps__OrganisationUrl', 'value', parameters('azureDevOpsOptions').organisationUrl), createObject('name', 'AzureDevOps__AdvisoryLabel', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryLabel), createObject('name', 'AzureDevOps__AdvisoryParentLabel', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryParentLabel), createObject('name', 'AzureDevOps__AdvisoryLabelPrefix', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryLabelPrefix), createObject('name', 'AzureDevOps__AdvisoryParentLabelPrefix', 'value', parameters('azureDevOpsOptions').workItemConfiguration.advisoryParentLabelPrefix), createObject('name', 'AzureDevOps__CreateParentWorkItems', 'value', parameters('azureDevOpsOptions').workItemConfiguration.createParentWorkItems), createObject('name', 'AzureDevOps__CreateChildWorkItems', 'value', parameters('azureDevOpsOptions').workItemConfiguration.createChildWorkItems), createObject('name', 'AzureDevOps__IncludeResourceId', 'value', parameters('azureDevOpsOptions').workItemConfiguration.includeResourceId), createObject('name', 'AzureDevOps__TargetRepository', 'value', parameters('azureDevOpsOptions').routing.targetRepository), createObject('name', 'AzureDevOps__UnmappedRepository', 'value', parameters('azureDevOpsOptions').routing.unmappedRepository), createObject('name', 'AzureDevOps__UseTriageRepoForUnmapped', 'value', parameters('azureDevOpsOptions').routing.useTriageForUnmapped), createObject('name', 'AzureDevOps__WorkItemScope', 'value', parameters('azureDevOpsOptions').routing.scope)), if(empty(parameters('advisoryOptions').targetResourceGroup), createArray(), createArray(createObject('name', 'AzureDevOps__TargetResourceGroup', 'value', parameters('advisoryOptions').targetResourceGroup))), if(equals(parameters('azureDevOpsOptions').routing.scope, 'monolithic'), createArray(), createArray(createObject('name', 'AzureDevOps__TargetContainerMapping', 'value', string(parameters('azureDevOpsOptions').routing.containerMappings)))), if(empty(parameters('azureDevOpsOptions').clientId), createArray(), createArray(createObject('name', 'AzureDevOps__ClientId', 'value', parameters('azureDevOpsOptions').clientId))), if(empty(parameters('azureDevOpsOptions').tenantId), createArray(), createArray(createObject('name', 'AzureDevOps__TenantId', 'value', parameters('azureDevOpsOptions').tenantId))), if(empty(parameters('azureDevOpsOptions').certificateId), createArray(), createArray(createObject('name', 'AzureDevOps__CertificateId', 'value', parameters('azureDevOpsOptions').certificateId))), if(empty(parameters('azureDevOpsOptions').workItemDefaultAssignee), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemDefaultAssignee', 'value', parameters('azureDevOpsOptions').workItemDefaultAssignee))), if(empty(parameters('azureDevOpsOptions').workItemOpenState), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemOpenState', 'value', parameters('azureDevOpsOptions').workItemOpenState))), if(empty(parameters('azureDevOpsOptions').workItemClosedState), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemClosedState', 'value', parameters('azureDevOpsOptions').workItemClosedState))), if(empty(parameters('azureDevOpsOptions').workItemType), createArray(), createArray(createObject('name', 'AzureDevOps__WorkItemType', 'value', parameters('azureDevOpsOptions').workItemType))))), if(not(contains(parameters('dataSinkBackend'), 'PowerBI')), createArray(), union(createArray(createObject('name', 'PowerBI__WorkspaceId', 'value', parameters('powerBIOptions').workspaceId), createObject('name', 'PowerBI__DatasetId', 'value', parameters('powerBIOptions').datasetId), createObject('name', 'PowerBI__TableName', 'value', parameters('powerBIOptions').tableName), createObject('name', 'PowerBI__WriteMode', 'value', parameters('powerBIOptions').writeMode)), if(empty(parameters('powerBIOptions').clientId), createArray(), createArray(createObject('name', 'PowerBI__ClientId', 'value', parameters('powerBIOptions').clientId))), if(empty(parameters('powerBIOptions').tenantId), createArray(), createArray(createObject('name', 'PowerBI__TenantId', 'value', parameters('powerBIOptions').tenantId))), if(empty(parameters('powerBIOptions').certificateId), createArray(), createArray(createObject('name', 'PowerBI__CertificateId', 'value', parameters('powerBIOptions').certificateId))))))]"
                         },
                         "redundancyMode": "None",
                         "publicNetworkAccess": "Enabled"
@@ -3194,39 +3760,39 @@
         }
       }
     }
-  ],
+  },
   "outputs": {
     "WORK_ITEM_BACKEND": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.WORK_ITEM_BACKEND.value]"
+      "value": "[reference('retireaBot').outputs.WORK_ITEM_BACKEND.value]"
     },
     "GITHUB_PRIVATE_KEY_ID": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.GITHUB_PRIVATE_KEY_ID.value]"
+      "value": "[reference('retireaBot').outputs.GITHUB_PRIVATE_KEY_ID.value]"
     },
     "GITHUB_PRIVATE_KEY_PATH": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.GITHUB_PRIVATE_KEY_PATH.value]"
+      "value": "[reference('retireaBot').outputs.GITHUB_PRIVATE_KEY_PATH.value]"
     },
     "AZURE_KEY_VAULT_NAME": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.AZURE_KEY_VAULT_NAME.value]"
+      "value": "[reference('retireaBot').outputs.AZURE_KEY_VAULT_NAME.value]"
     },
     "ADO_CERTIFICATE_ID": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.ADO_CERTIFICATE_ID.value]"
+      "value": "[reference('retireaBot').outputs.ADO_CERTIFICATE_ID.value]"
     },
     "ADO_CERTIFICATE_PATH": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.ADO_CERTIFICATE_PATH.value]"
+      "value": "[reference('retireaBot').outputs.ADO_CERTIFICATE_PATH.value]"
     },
     "POWERBI_CERTIFICATE_ID": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.POWERBI_CERTIFICATE_ID.value]"
+      "value": "[reference('retireaBot').outputs.POWERBI_CERTIFICATE_ID.value]"
     },
     "POWERBI_CERTIFICATE_PATH": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', format('retireaBot-{0}', parameters('deploymentName'))), '2025-04-01').outputs.POWERBI_CERTIFICATE_PATH.value]"
+      "value": "[reference('retireaBot').outputs.POWERBI_CERTIFICATE_PATH.value]"
     }
   }
 }
