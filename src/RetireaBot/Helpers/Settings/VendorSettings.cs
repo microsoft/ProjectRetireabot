@@ -26,7 +26,8 @@ namespace Microsoft.RetireaBot.Helpers.Settings
 
             string? mappingJson = config.GetSection($"{section}:TargetContainerMapping").Get<string>();
             TargetContainerMapping = !string.IsNullOrEmpty(mappingJson)
-                ? JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? []
+                ? (JsonSerializer.Deserialize<List<AzureRepositoryMap>>(mappingJson) ?? [])
+                    .Select(ScanScopeResolver.NormalizeMapping).ToList()
                 : [];
 
             IncludeResourceId = config.GetSection($"{section}:IncludeResourceId").Get<bool?>() ?? false;

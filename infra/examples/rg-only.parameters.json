@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "deploymentName": {
+      "value": "azegscope"
+    },
+    "location": {
+      "value": "uksouth"
+    },
+    "scanOptions": {
+      "value": {
+        "mode": "Explicit",
+        "scopes": [
+          "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-production"
+        ]
+      }
+    },
+    "workItemBackend": {
+      "value": []
+    },
+    "dataSinkBackend": {
+      "value": []
+    },
+    "httpEndpoint": {
+      "value": {
+        "enabled": true,
+        "includeOutput": true,
+        "allowWhatIf": true
+      }
+    }
+  }
+}

@@ -7,7 +7,9 @@ import {
   GitHubOptionsInput
   HttpEndpointOptionsInput
   PowerBIOptionsInput
+  ScanOptionsInput
 } from 'modules/types.bicep'
+import { normalizeMapping, resolveScanOptions } from 'modules/scanScopes.bicep'
 
 metadata name = 'Azure RetireaBot'
 metadata description = '''This module contains all the components needed to deploy Azure RetireaBot onto your subscription.
@@ -45,6 +47,9 @@ param timerTrigger string = '0 0 0 * * 1'
 
 @description('Configuration for selecting which Azure Advisor recommendations RetireaBot processes.')
 param advisoryOptions AdvisoryOptionsInput = {}
+
+@description('Scan mode, approved scope IDs, and optional Reader provisioning. Defaults to scanning and granting Reader on the deployment subscription.')
+param scanOptions ScanOptionsInput = {}
 
 @description('Configuration for Azure DevOps authentication and work item creation.')
 param azureDevOpsOptions AzureDevOpsOptionsInput = {}
@@ -130,6 +135,12 @@ var defaultPowerBIOptions = {
   writeMode: 'Append'
 }
 
+var defaultScanOptions = {
+  mode: 'DeploymentSubscription'
+  scopes: []
+  assignReader: true
+}
+
 var resolvedAdvisoryOptions = union(defaultAdvisoryOptions, advisoryOptions)
 var resolvedAzureDevOpsOptions = union(defaultAzureDevOpsOptions, azureDevOpsOptions, {
   routing: union(defaultRoutingOptions, azureDevOpsOptions.?routing ?? {})
@@ -199,6 +210,34 @@ var validatedAzureDevOpsOptions = contains(workItemBackend, 'AzureDevOps') && !r
   ? fail('Azure DevOps must create at least one type of work item.')
   : resolvedAzureDevOpsOptions
 
+var normalizedGitHubOptions = union(validatedGitHubOptions, {
+  routing: union(validatedGitHubOptions.routing, {
+    containerMappings: contains(workItemBackend, 'GitHub')
+      ? map(validatedGitHubOptions.routing.containerMappings, mapping => normalizeMapping(mapping))
+      : []
+  })
+})
+var normalizedAzureDevOpsOptions = union(validatedAzureDevOpsOptions, {
+  routing: union(validatedAzureDevOpsOptions.routing, {
+    containerMappings: contains(workItemBackend, 'AzureDevOps')
+      ? map(validatedAzureDevOpsOptions.routing.containerMappings, mapping => normalizeMapping(mapping))
+      : []
+  })
+})
+var scanRoutingMappings = concat(
+  contains(workItemBackend, 'GitHub') && normalizedGitHubOptions.routing.scope == 'perContainer'
+    ? normalizedGitHubOptions.routing.containerMappings
+    : [],
+  contains(workItemBackend, 'AzureDevOps') && normalizedAzureDevOpsOptions.routing.scope == 'perContainer'
+    ? normalizedAzureDevOpsOptions.routing.containerMappings
+    : []
+)
+var resolvedScanOptions = resolveScanOptions(
+  union(defaultScanOptions, scanOptions),
+  subscription().subscriptionId,
+  scanRoutingMappings
+)
+
 module keyVault 'modules/keyVault.bicep' = {
   name: 'keyVault-${deploymentSuffix}'
   params: {
@@ -241,7 +280,8 @@ module managedIdentity 'modules/managedIdentity.bicep' = {
     applicationInsightsName: monitoring.outputs.appInsightsName
 
     workItemBackend: workItemBackend
-    azureDevOpsOptions: validatedAzureDevOpsOptions
+    scanOptions: resolvedScanOptions
+    azureDevOpsOptions: normalizedAzureDevOpsOptions
     powerBIOptions: resolvedPowerBIOptions
 
     dataSinkBackend: dataSinkBackend
@@ -267,8 +307,9 @@ module functionApp 'modules/functionApp.bicep' = {
     dataSinkBackend: dataSinkBackend
     timerTrigger: timerTrigger
     advisoryOptions: resolvedAdvisoryOptions
-    azureDevOpsOptions: validatedAzureDevOpsOptions
-    gitHubOptions: validatedGitHubOptions
+    scanOptions: resolvedScanOptions
+    azureDevOpsOptions: normalizedAzureDevOpsOptions
+    gitHubOptions: normalizedGitHubOptions
     lifecycleSignalsOptions: resolvedLifecycleSignalsOptions
     httpEndpoint: resolvedHttpEndpoint
     powerBIOptions: resolvedPowerBIOptions

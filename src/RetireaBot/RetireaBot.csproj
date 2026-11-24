@@ -47,6 +47,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Microsoft.RetireaBot.Tests" />
     <Using Include="System.Threading.ExecutionContext" Alias="ExecutionContext" />
   </ItemGroup>
   <ProjectExtensions>

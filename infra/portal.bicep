@@ -30,8 +30,18 @@ param timerTrigger string = '0 0 0 * * 1'
 @description('Whether resolved or completed Azure Advisor advisories should be included.')
 param advisoryIncludeResolvedAdvisories bool = false
 
-@description('Only create work items for resources in this resource group. Leave blank for all resource groups.')
+@description('Resource-group work-item filter. Does not change scan scopes or Reader assignments.')
 param advisoryTargetResourceGroup string = ''
+
+@allowed(['Explicit', 'FromRouting', 'DeploymentSubscription'])
+@description('Scan mode. Defaults to scanning only the deployment subscription.')
+param scanMode string = 'DeploymentSubscription'
+
+@description('Fully qualified subscription/RG IDs for Explicit scan mode.')
+param scanScopes string[] = []
+
+@description('Whether to provision scan Reader assignments. Does not affect scan filtering or own-component permissions.')
+param scanAssignReader bool = true
 
 @description('Whether lifecycle advisories should be generated for supported service version policies.')
 param lifecycleSignalsEnabled bool = false
@@ -240,6 +250,11 @@ module retireaBot 'main.bicep' = {
     advisoryOptions: {
       includeResolvedAdvisories: advisoryIncludeResolvedAdvisories
       targetResourceGroup: advisoryTargetResourceGroup
+    }
+    scanOptions: {
+      mode: scanMode
+      scopes: scanScopes
+      assignReader: scanAssignReader
     }
     lifecycleSignalsOptions: {
       enabled: lifecycleSignalsEnabled

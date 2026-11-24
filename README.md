@@ -30,34 +30,79 @@ Keep in mind, this will **only** deploy the architecture where azd will deploy e
 
 The portal deployment presents each setting as an individual field. The grouped option objects documented below remain the interface used by azd and parameter files.
 
+### Monitoring permissions
+
+Set `scanOptions` to control which Azure resources RetireaBot scans, independently of work-item routing:
+
+| Mode                               | Scan boundary                                                                                                                                                        |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Explicit`                         | Only the fully qualified subscription and/or resource-group IDs in `scopes`. An empty list is rejected.                                                              |
+| `FromRouting`                      | Scopes from `scopeId` on every mapping in enabled `perContainer` GitHub/ADO backends. Name-only and management-group mappings are rejected. No mappings is an error. |
+| `DeploymentSubscription` (default) | Only the deployment subscription. Does not discover other accessible subscriptions.                                                                                  |
+
+`assignReader` defaults to `true` and grants Reader at those same scopes. Set it to `false` for externally managed RBAC; scope validation and runtime filtering still apply. The app's storage, Key Vault, and telemetry permissions remain separate. The deployer needs module deployment and role-assignment permissions at every scope where Reader is provisioned. Cross-subscription scopes must be accessible to the managed identity in the same tenant.
+
+For example, add this entry under `parameters` in an existing parameter file:
+
+```json
+"scanOptions": {
+  "value": {
+    "mode": "Explicit",
+    "scopes": [
+      "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-production",
+      "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-shared"
+    ],
+    "assignReader": true
+  }
+}
+```
+
+Subscription IDs must be GUIDs. Scope IDs are case-insensitively deduplicated; RG names in explicit scope IDs accept ASCII letters, digits, underscores, hyphens, periods, and parentheses (1-90 characters, no trailing period). Resource/provider and management-group scope IDs are not accepted. Do not supply `scopes` in other modes.
+
+RetireaBot queries the containing subscriptions directly without subscription discovery. Advisor recommendations and AKS/PostgreSQL lifecycle resources are restricted in Resource Graph and checked again before work items, sinks, or HTTP output. An RG-only scan excludes subscription-level advisories. Query/configuration failures never fall back to broader discovery. RBAC still controls what Azure makes visible; configuring a scope alone cannot grant visibility.
+
+The portal exposes `scanMode`, `scanScopes`, and `scanAssignReader`. For direct runtime configuration, use `Scan__Mode`, `Scan__Scopes` (a JSON array), and `Scan__AssignReader`; `DeploymentSubscription` also requires `Scan__DeploymentSubscriptionId`. Deployment additionally sets `Scan__ResolvedScopes` to detect drift from provisioned scopes; redeploy after changing scopes or routing-derived boundaries.
+
+**Defaults:** omitting `scanOptions` uses `DeploymentSubscription` with `assignReader: true`, provisioning Reader on the deployment subscription. Routing-derived access is opt-in through `FromRouting`; `advisoryOptions.targetResourceGroup` is only a work-item filter. For an existing RG-only deployment, select `Explicit` or `FromRouting` before redeploying to avoid adding subscription Reader.
+
+**Migration:** choose an explicit mode, deploy both infrastructure and application code, then explicitly remove obsolete Reader assignments and check inherited grants. Incremental deployments do not delete old assignments, and `assignReader: false` does not revoke them. Existing routing and `targetResourceGroup` remain output settings, not scan boundaries. Live RG-only managed-identity verification is a separate deployment step.
+
 ### Parameters
 
 Before provisioning the architecture, copy the example that matches your scenario to `infra/main.parameters.json` and replace its placeholder values:
 
-| Scenario                       | Example file                                      |
-| ------------------------------ | ------------------------------------------------- |
-| GitHub issues                  | `infra/examples/github.parameters.json`           |
-| Azure DevOps work items        | `infra/examples/ado.parameters.json`              |
-| Power BI output                | `infra/examples/powerbi.parameters.json`          |
-| GitHub, Azure DevOps, Power BI | `infra/examples/mixed.parameters.json`            |
-| Mixed work-item smoke test     | `infra/examples/mixed-work-items.parameters.json` |
+| Scenario                                             | Example file                                      |
+| ---------------------------------------------------- | ------------------------------------------------- |
+| GitHub issues                                        | `infra/examples/github.parameters.json`           |
+| Azure DevOps work items                              | `infra/examples/ado.parameters.json`              |
+| Power BI output                                      | `infra/examples/powerbi.parameters.json`          |
+| GitHub, Azure DevOps, Power BI                       | `infra/examples/mixed.parameters.json`            |
+| Routing-derived RG scan with GitHub and Azure DevOps | `infra/examples/mixed-work-items.parameters.json` |
+| Explicit RG-only scan with HTTP output               | `infra/examples/rg-only.parameters.json`          |
+
+The GitHub, Azure DevOps, Power BI, and mixed-output examples use `"scanOptions": { "value": {} }` to inherit the deployment-subscription scan and Reader defaults. The routing-derived example scans only the RG identified by its GitHub mapping's `scopeId`; its monolithic Azure DevOps routing does not add scan scopes.
+
+For either RG-scoped example, replace the placeholder subscription ID and resource-group name with an existing group before deployment. Reader provisioning remains enabled by default; add `"assignReader": false` inside the `scanOptions.value` object if access is managed externally. This does not revoke existing assignments.
+
+The HTTP-only example needs no GitHub, Azure DevOps, or Power BI credentials. After deploying infrastructure and application code, invoke `/api/GetRetirementsManual?api-version=2026-06-25-preview&whatIf=true` with the Function key in the `x-functions-key` header. Output is returned over HTTP, with no work-item or sink writes.
 
 There are some key parameters you need to specify:
 
-| Name                    | Required            | Description                                                                                                                                     |
-| ----------------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| dataSinkBackend         | `true`              | What data sink backends RetireaBot should use to push data to (Valid Options: '`PowerBI`') Multiple can be used at once                         |
-| location                | `true`              | The location where the resources are deployed                                                                                                   |
-| workItemBackend         | `true`              | What work item backends RetireaBot should use to create work items in (Valid options: '`GitHub`', '`AzureDevOps`') Multiple can be used at once |
-| deploymentName          | `false`             | A unique application/solution name for all resources in this deployment                                                                         |
-| deploymentUniqueText    | `false`             | Unique text value for the solution. This is used to ensure resource names are unique for global resource                                        |
-| timerTrigger            | `false`             | NCRONTAB expression for the scheduled timer trigger. Default: `0 0 0 * * 1` (every Monday at 00:00 UTC)                                         |
-| advisoryOptions         | `false`             | Behavior and configuration of advisories when passed to a backend, see [Advisory Settings](#advisory)                                           |
-| lifecycleSignalsOptions | `false`             | How Lifecycle Signals should be handled and processed by RetireaBot, see [Lifecycle Signals](#lifecycle-signals)                                |
-| httpEndpoint            | `false`             | Settings related to HTTP Endpoints, whether they should be enabled, include detailed output and dry running. See [HTTP Options](#http-endpoint) |
-| azureDevOpsOptions      | `false`<sub>2</sub> | Settings for Azure DevOps authentication and work item creation, see [Azure DevOps Settings](#azure-devops)                                     |
-| gitHubOptions           | `false`<sub>2</sub> | Settings for GitHub authentication, issue creation, and assigning CoPilot, see [GitHub Settings](#github)                                       |
-| powerBIOptions          | `false`<sub>2</sub> | Settings for Power BI authentication and retirement advisory data output, see [Power BI Settings](#power-bi)                                    |
+| Name                    | Required            | Description                                                                                                                                                                       |
+| ----------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dataSinkBackend         | `true`              | What data sink backends RetireaBot should use to push data to (Valid Options: '`PowerBI`') Multiple can be used at once                                                           |
+| location                | `true`              | The location where the resources are deployed                                                                                                                                     |
+| workItemBackend         | `true`              | What work item backends RetireaBot should use to create work items in (Valid options: '`GitHub`', '`AzureDevOps`') Multiple can be used at once                                   |
+| deploymentName          | `false`             | A unique application/solution name for all resources in this deployment                                                                                                           |
+| deploymentUniqueText    | `false`             | Unique text value for the solution. This is used to ensure resource names are unique for global resource                                                                          |
+| timerTrigger            | `false`             | NCRONTAB expression for the scheduled timer trigger. Default: `0 0 0 * * 1` (every Monday at 00:00 UTC)                                                                           |
+| advisoryOptions         | `false`             | Behavior and configuration of advisories when passed to a backend, see [Advisory Settings](#advisory)                                                                             |
+| scanOptions             | `false`             | Scan mode, approved scope IDs, and optional Reader provisioning; defaults to `DeploymentSubscription` with Reader enabled. See [Monitoring permissions](#monitoring-permissions). |
+| lifecycleSignalsOptions | `false`             | How Lifecycle Signals should be handled and processed by RetireaBot, see [Lifecycle Signals](#lifecycle-signals)                                                                  |
+| httpEndpoint            | `false`             | Settings related to HTTP Endpoints, whether they should be enabled, include detailed output and dry running. See [HTTP Options](#http-endpoint)                                   |
+| azureDevOpsOptions      | `false`<sub>2</sub> | Settings for Azure DevOps authentication and work item creation, see [Azure DevOps Settings](#azure-devops)                                                                       |
+| gitHubOptions           | `false`<sub>2</sub> | Settings for GitHub authentication, issue creation, and assigning CoPilot, see [GitHub Settings](#github)                                                                         |
+| powerBIOptions          | `false`<sub>2</sub> | Settings for Power BI authentication and retirement advisory data output, see [Power BI Settings](#power-bi)                                                                      |
 
 <sub>2</sub> Required when the backend is enabled in `dataSinkBackend` or `workItemBackend`
 
@@ -68,7 +113,7 @@ Settings related to selecting which Azure Advisor recommendations RetireaBot pro
 | Name                      | Required | Description                                                                                                        |
 | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | includeResolvedAdvisories | `false`  | Whether resolved or completed Azure Advisor advisories should be included when creating work items. Default: false |
-| targetResourceGroup       | `false`  | The resource group RetireaBot should create issues for, leave blank any resource group                             |
+| targetResourceGroup       | `false`  | Resource-group work-item filter. Does not change scan scopes or Reader assignments.                                |
 
 #### Lifecycle Signals
 
@@ -176,11 +221,33 @@ When `scope` is set to `perContainer`, `containerMappings` decides which reposit
 
 Each entry has the following properties:
 
-| Name     | Description                                                                                                                                                                                   |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`   | The identifier of the container to match. For `ResourceGroup` use the resource group name, for `Subscription` use the subscription ID, and for `ManagementGroup` use the management group ID. |
-| `type`   | The type of container to match. Valid options: `ResourceGroup`, `Subscription`, `ManagementGroup`.                                                                                            |
-| `target` | The repository or project work items should be created in for resources in this container.                                                                                                    |
+| Name      | Description                                                                                                                                                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | The identifier of the container to match. For `ResourceGroup` use the resource group name, for `Subscription` use the subscription ID, and for `ManagementGroup` use the management group ID. |
+| `type`    | The type of container to match. Valid options: `ResourceGroup`, `Subscription`, `ManagementGroup`.                                                                                            |
+| `target`  | The repository or project work items should be created in for resources in this container.                                                                                                    |
+| `scopeId` | Fully qualified subscription/RG ID. Required in `FromRouting` scan mode. When supplied, `name` and `type` may be omitted; if present they must agree.                                         |
+
+Use `scopeId` to distinguish identically named resource groups in different subscriptions. It matches the advisory's affected resource, not just its recommendation ID. For example, combine `"scanOptions": { "mode": "FromRouting", "assignReader": true }` with this backend routing object (inside parameter `value` objects as appropriate):
+
+```json
+{
+  "scope": "perContainer",
+  "targetRepository": "ExampleUser/ParentRepo",
+  "containerMappings": [
+    {
+      "scopeId": "/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/rg-production",
+      "target": "ExampleUser/ProductionRepo"
+    },
+    {
+      "scopeId": "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg-production",
+      "target": "ExampleUser/OtherProductionRepo"
+    }
+  ]
+}
+```
+
+In `Explicit` mode, routing never expands the scan boundary. Name/type-only mappings remain supported for output routing outside `FromRouting` mode.
 
 For example, the complete `routing` object can be configured as follows:
 

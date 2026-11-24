@@ -96,6 +96,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                 throw new ArgumentNullException("_keyClient", "When using AuthMode \"App\", a valid connection to a KeyVault has to be present. Please check your configuration.");
             }
 
+            _logger.LogDebug("Loading GitHub App signing key {KeyName} from {VaultUri}", _authModeSrv.GetPrivateKeyId(), _keyClient.VaultUri);
             KeyVaultKey key = _keyClient.GetKey(_authModeSrv.GetPrivateKeyId());
             if (key.KeyType != KeyType.Rsa && key.KeyType != KeyType.RsaHsm)
             {
@@ -127,6 +128,7 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
             JwtPayload jwtPayload = new JwtPayload((IEnumerable<System.Security.Claims.Claim>)claims);
             JwtSecurityToken jwt = new JwtSecurityToken(jwtHeader, jwtPayload);
 
+            _logger.LogDebug("Signing GitHub App JWT for AppId {AppId} with key {KeyId}", _authModeSrv.GetAppId(), key.Id);
             string token = new JwtSecurityTokenHandler().WriteToken(jwt);
 
             // have to get an install authenticated GitHubClient to do operations
@@ -135,15 +137,49 @@ namespace Microsoft.RetireaBot.Helpers.GitHub
                 Credentials = new Credentials(token, AuthenticationType.Bearer)
             };
 
-            var response = intermediate.GitHubApps.CreateInstallationToken(_authModeSrv.GetAppInstallId()!.Value);
-            _tokenExpiry = DateTimeOffset.UtcNow.AddMinutes(55); // Install tokens expire every hour, refresh the token 5 minutes early to avoid any weirdness
+            var response = RequestInstallationTokenAsync(
+                intermediate.GitHubApps, _authModeSrv.GetAppId()!, _authModeSrv.GetAppInstallId()!.Value, key.Id, _logger
+            ).GetAwaiter().GetResult();
+            _tokenExpiry = response.ExpiresAt.AddMinutes(-5);
 
-            _logger.LogInformation("Created new App Client, valid until {Expiry}", _tokenExpiry);
+            _logger.LogInformation("Created GitHub App installation client for AppId {AppId}, InstallationId {InstallationId}; refresh after {Expiry}",
+                _authModeSrv.GetAppId(), _authModeSrv.GetAppInstallId(), _tokenExpiry);
 
             return new GitHubClient(new ProductHeaderValue("RetireaBot"))
             {
-                Credentials = new Credentials(response.Result.Token)
+                Credentials = new Credentials(response.Token)
             };
+        }
+
+        internal static async Task<Octokit.AccessToken> RequestInstallationTokenAsync(
+            IGitHubAppsClient apps, string appId, long installationId, Uri keyId, ILogger logger)
+        {
+            logger.LogInformation("Requesting GitHub installation token for AppId {AppId}, InstallationId {InstallationId}, signing key {KeyId}",
+                appId, installationId, keyId);
+            try
+            {
+                return await apps.CreateInstallationToken(installationId);
+            }
+            catch (ApiException exception)
+            {
+                string guidance = exception.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.Unauthorized =>
+                        "GitHub rejected the App JWT. Check GitHub:AppId and that the configured Key Vault key belongs to that same GitHub App and has not been revoked or replaced. Stale App/key configuration, JWT formatting, or clock drift can cause this; the response does not identify which.",
+                    System.Net.HttpStatusCode.NotFound =>
+                        "Check GitHub:AppInstallId, that the installation still exists, and that it belongs to GitHub:AppId.",
+                    System.Net.HttpStatusCode.Forbidden =>
+                        "Check whether the GitHub App installation is suspended or access is restricted. Consult the GitHub response for permission or rate-limit details.",
+                    _ => "Check the GitHub response and service status."
+                };
+                string message = $"GitHub App authentication failed while requesting an installation token " +
+                    $"(HTTP {(int)exception.StatusCode}, AppId '{appId}', InstallationId '{installationId}', signing key '{keyId}'). " +
+                    $"{guidance} GitHub response: {exception.Message}";
+                logger.LogError(exception,
+                    "GitHub installation token request failed: HTTP {StatusCode}, AppId {AppId}, InstallationId {InstallationId}, KeyId {KeyId}. {Guidance}",
+                    (int)exception.StatusCode, appId, installationId, keyId, guidance);
+                throw new InvalidOperationException(message, exception);
+            }
         }
     }
 }

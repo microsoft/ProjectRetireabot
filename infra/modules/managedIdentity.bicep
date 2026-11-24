@@ -3,7 +3,9 @@ targetScope = 'resourceGroup'
 import {
   AzureDevOpsOptions
   PowerBIOptions
+  ScanOptions
 } from 'types.bicep'
+import { parseScanScope } from 'scanScopes.bicep'
 
 param deploymentSuffix string
 param location string
@@ -16,9 +18,18 @@ param workItemBackend string[]
 
 param azureDevOpsOptions AzureDevOpsOptions
 param powerBIOptions PowerBIOptions
+param scanOptions ScanOptions
 
 param dataSinkBackend string[]
 param gitHubParamCount int
+
+var effectiveScanScopes = map(scanOptions.scopes, id => parseScanScope(id))
+var readerSubscriptions = scanOptions.assignReader
+  ? filter(effectiveScanScopes, scope => empty(scope.resourceGroupName))
+  : []
+var readerResourceGroups = scanOptions.assignReader
+  ? filter(effectiveScanScopes, scope => !empty(scope.resourceGroupName))
+  : []
 
 var storageBlobDataOwnerRoleId = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
@@ -49,13 +60,27 @@ resource applicationInsights 'Microsoft.Insights/components@2020-02-02' existing
 }
 
 var subscriptionRoleAssignmentsName = 'sra-${deploymentSuffix}-${uniqueString(location)}'
-module subscriptionRoleAssignments 'subscriptionRoleAssignments.bicep' = {
-  name: subscriptionRoleAssignmentsName
-  scope: subscription()
-  params: {
-    principalId: userAssignedIdentity.properties.principalId
+module subscriptionRoleAssignments 'subscriptionRoleAssignments.bicep' = [
+  for readerScope in readerSubscriptions: {
+    name: readerScope.subscriptionId == subscription().subscriptionId
+      ? subscriptionRoleAssignmentsName
+      : 'sra-${deploymentSuffix}-${uniqueString(readerScope.subscriptionId)}'
+    scope: subscription(readerScope.subscriptionId)
+    params: {
+      principalId: userAssignedIdentity.properties.principalId
+    }
   }
-}
+]
+
+module resourceGroupRoleAssignments 'resourceGroupRoleAssignments.bicep' = [
+  for readerScope in readerResourceGroups: {
+    name: 'rg-reader-${deploymentSuffix}-${uniqueString(readerScope.subscriptionId, readerScope.resourceGroupName)}'
+    scope: resourceGroup(readerScope.subscriptionId, readerScope.resourceGroupName)
+    params: {
+      principalId: userAssignedIdentity.properties.principalId
+    }
+  }
+]
 
 resource roleAssignmentBlobDataOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(subscription().id, storageAccount.id, userAssignedIdentity.id, 'Storage Blob Data Owner')
@@ -149,3 +174,7 @@ resource roleAssignmentKeyVaultCrypto 'Microsoft.Authorization/roleAssignments@2
 output resourceId string = userAssignedIdentity.id
 output principalId string = userAssignedIdentity.properties.principalId
 output clientId string = userAssignedIdentity.properties.clientId
+
+output readerResourceGroupIds string[] = [
+  for readerScope in readerResourceGroups: '/subscriptions/${readerScope.subscriptionId}/resourceGroups/${readerScope.resourceGroupName}'
+]
